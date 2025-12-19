@@ -1,0 +1,9 @@
+id: tsumugi
+display_name: つむぎ
+voicevox:
+  speaker_id:
+style:
+  first_person: わたし
+  endings: []
+  role: 未設定
+phrases: {}
