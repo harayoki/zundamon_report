@@ -25,6 +25,8 @@ class PipelineConfig:
     speakers: SpeakerMode
     speaker1: str
     speaker2: str
+    zunda_senior_job: Optional[str]
+    zunda_junior_job: Optional[str]
     want_mp3: bool
     mp3_bitrate: str
     keep_work: bool
@@ -125,6 +127,12 @@ def run_pipeline(config: PipelineConfig) -> None:
 
     print("[reportvox] converting style and inserting phrases...")
     stylized = style_convert.apply_style(mapped, char1, char2, backend=config.llm_backend)
+    stylized = _maybe_prepend_intro(
+        stylized,
+        char1=char1,
+        senior_job=config.zunda_senior_job,
+        junior_job=config.zunda_junior_job,
+    )
 
     print("[reportvox] synthesizing with VoiceVox...")
     synthesized_paths = voicevox.synthesize_segments(
@@ -147,3 +155,34 @@ def run_pipeline(config: PipelineConfig) -> None:
         shutil.rmtree(run_dir, ignore_errors=True)
 
     print("[reportvox] done.")
+
+
+def _maybe_prepend_intro(
+    segments: Sequence[style_convert.StylizedSegment],
+    char1: characters.CharacterMeta,
+    senior_job: Optional[str],
+    junior_job: Optional[str],
+) -> list[style_convert.StylizedSegment]:
+    if not (senior_job and junior_job):
+        return list(segments)
+
+    speaker_label: str | None = None
+    for seg in segments:
+        if seg.character == char1.id:
+            speaker_label = seg.speaker
+            break
+
+    if speaker_label is None and segments:
+        speaker_label = segments[0].speaker
+    if speaker_label is None:
+        speaker_label = "A"
+
+    intro_text = f"僕の名前はずんだもん、{senior_job}にあこがれる{junior_job}なのだ"
+    intro_segment = style_convert.StylizedSegment(
+        start=0.0,
+        end=0.0,
+        text=intro_text,
+        speaker=speaker_label,
+        character=char1.id,
+    )
+    return [intro_segment, *segments]
