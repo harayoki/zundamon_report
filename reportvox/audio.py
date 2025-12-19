@@ -1,0 +1,75 @@
+"""Audio utilities."""
+
+from __future__ import annotations
+
+import pathlib
+import subprocess
+import wave
+from typing import Sequence
+
+
+def ensure_ffmpeg() -> None:
+    """Ensure ffmpeg is available; raise RuntimeError if not."""
+    try:
+        subprocess.run(
+            ["ffmpeg", "-version"],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError("ffmpeg必須です。README参照。ffmpeg が見つかりません。") from exc
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError("ffmpeg必須です。README参照。ffmpeg の実行に失敗しました。") from exc
+
+
+def normalize_to_wav(src: pathlib.Path, dest: pathlib.Path) -> pathlib.Path:
+    """Convert input audio to wav using ffmpeg."""
+    cmd = ["ffmpeg", "-y", "-i", str(src), str(dest)]
+    print("[reportvox] wav正規化開始")
+    try:
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError("ffmpegによるwav正規化に失敗しました。") from exc
+    print("[reportvox] wav正規化完了")
+    return dest
+
+
+def _read_params(path: pathlib.Path) -> tuple[int, int, int, int]:
+    with wave.open(str(path), "rb") as wf:
+        return (wf.getnchannels(), wf.getsampwidth(), wf.getframerate(), wf.getnframes())
+
+
+def join_wavs(inputs: Sequence[pathlib.Path], output: pathlib.Path) -> None:
+    if not inputs:
+        raise ValueError("No input wavs to join.")
+
+    params = _read_params(inputs[0])
+    nchannels, sampwidth, framerate, _ = params
+
+    with wave.open(str(output), "wb") as out_wf:
+        out_wf.setnchannels(nchannels)
+        out_wf.setsampwidth(sampwidth)
+        out_wf.setframerate(framerate)
+        for path in inputs:
+            p = _read_params(path)
+            if p[:3] != params[:3]:
+                raise ValueError("Input wav parameters do not match; cannot concatenate.")
+            with wave.open(str(path), "rb") as in_wf:
+                out_wf.writeframes(in_wf.readframes(in_wf.getnframes()))
+
+
+def convert_to_mp3(src: pathlib.Path, dest: pathlib.Path, bitrate: str = "192k") -> None:
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(src),
+        "-b:a",
+        bitrate,
+        str(dest),
+    ]
+    try:
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError("ffmpegによるmp3生成に失敗しました。") from exc

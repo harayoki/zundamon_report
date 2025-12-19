@@ -1,0 +1,12 @@
+id: metan
+display_name: めたん
+voicevox:
+  speaker_id: 2
+style:
+  first_person: わたし
+  endings: ["するわ", "ね", "かしら"]
+  role: ツッコミ役
+phrases:
+  idea_intro: ["ここからはわたしが説明するわ"]
+  explanation_start: ["要するにこういうことね"]
+  conclusion: ["それで決まりね"]

@@ -1,0 +1,12 @@
+id: zundamon
+display_name: ずんだもん
+voicevox:
+  speaker_id: 3
+style:
+  first_person: ぼく
+  endings: ["なのだ", "なのだよ"]
+  role: 解説役
+phrases:
+  idea_intro: ["賢いぼくは考えたのだ", "ここでぼくの出番なのだ"]
+  explanation_start: ["つまりこういうことなのだ"]
+  conclusion: ["というわけなのだ"]
