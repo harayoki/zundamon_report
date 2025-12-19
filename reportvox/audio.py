@@ -30,7 +30,7 @@ def normalize_to_wav(src: pathlib.Path, dest: pathlib.Path) -> pathlib.Path:
     try:
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except subprocess.CalledProcessError as exc:
-        raise RuntimeError("ffmpegによるwav正規化に失敗しました。") from exc
+        raise RuntimeError("ffmpegによるwav正規化に失敗しました。入力に音声トラックが見つからないため変換できませんでした。") from exc
     print("[reportvox] wav正規化完了")
     return dest
 
