@@ -31,6 +31,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--keep-work", action="store_true", help="Keep intermediate files under work/.")
     parser.add_argument("--model", default="small", help="Whisper model size to use.")
     parser.add_argument(
+        "--resume",
+        dest="resume_run_id",
+        default=None,
+        help="Resume processing from an existing work/<run_id> directory.",
+    )
+    parser.add_argument(
         "--llm",
         choices=["none", "openai", "local"],
         default="none",
@@ -61,6 +67,7 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
         whisper_model=args.model,
         llm_backend=args.llm,
         hf_token=args.hf_token,
+        resume_run_id=args.resume_run_id,
     )
 
 
