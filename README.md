@@ -3,12 +3,12 @@
 ReportVox は、音声ファイルを「文字起こし → 話者分離 → 口調変換 → VOICEVOX での音声生成 → WAV/MP3 出力」まで自動化する CLI ツールです。NotebookLM などが生成する m4a を扱うため ffmpeg は必須で、`ffmpeg -version` が通る状態にしてください。動画ファイル（mp4 など）の入力も許可していますが、音声トラックがあることが前提で、最初に ffmpeg で WAV に正規化してから処理します。
 
 ## ワークフロー
-1. 入力音声を `work/<run_id>/` にコピー
+1. 入力音声を `work/<run_id>/` にコピー（run_id は重複しないよう自動採番）
 2. ffmpeg で WAV に正規化（以降は WAV のみ使用）
-3. Whisper で文字起こし（セグメント JSON 保存）
-4. pyannote.audio で話者分離（1/2人自動判定対応）
+3. Whisper で文字起こし（セグメント JSON を保存）
+4. pyannote.audio で話者分離（`--speakers` が `auto/2` のときに実行）
 5. Whisper セグメントと突合して話者ラベルを付与
-6. 1人相当ならずんだもん全編、2人なら発話量の多い方を speaker1 としてキャラ割当
+6. 1 人相当なら speaker1 のキャラクターで全編、2 人なら発話量が多い話者を speaker1 としてキャラ割当
 7. （オプション）口調変換、定型句の自動挿入
 8. VOICEVOX Engine HTTP API で行ごとに合成
 9. wav を結合して `out/<stem>_report.wav` を生成
@@ -36,6 +36,7 @@ pip install -r requirements.txt
 - pyannote.audio の実行には Hugging Face Token が必要な場合があります。
   - 環境変数 `PYANNOTE_TOKEN` または CLI 引数 `--hf-token` で指定してください。
   - 上記が未設定のまま実行すると、最初に「文字起こしまでで終了する」旨を対話的に確認します。OK を選んだ場合は文字起こしのみ行い、`work/<run_id>/` に結果を残した上で終了します。
+  - `--speakers 1` を指定した場合は話者分離をスキップするため、Token 無しでも最後まで進みます。
 
 ## 使い方
 ```bash
@@ -64,12 +65,26 @@ python -m reportvox input.mp4 --speakers auto --mp3
 python -m reportvox input.wav --voicevox-url http://127.0.0.1:50021
 ```
 
+### 主なオプション
+- `--speakers {auto,1,2}`: 話者数の扱い。`auto` では pyannote.audio で 1/2 人を判定し、全発話の 93% 以上を占める話者がいれば単一話者として処理します。
+- `--speaker1 / --speaker2`: キャラクター ID。デフォルトは `zundamon` と `metan`。発話量が多い話者が `speaker1` に割り当てられます。
+- `--model`: Whisper のモデルサイズ（例: `base`, `small`, `medium`, `large`）。
+- `--voicevox-url`: VOICEVOX Engine のベース URL。
+- `--llm`: 口調変換バックエンドの選択。`none`（変換なし）、`openai`、`local` から指定できます（デフォルトは `none`）。
+- `--mp3 / --bitrate`: MP3 も生成する場合のフラグとビットレート。
+- `--keep-work`: ワークディレクトリ `work/<run_id>/` を削除せずに残します。
+- `--resume <run_id>`: 中断/完了済みのワークディレクトリを再利用して処理を再開します。`input.*` や `transcript.json`、`diarization.json`、`stylized.json` が既存の場合は再利用し、欠けている工程のみ実行します。
+- `--hf-token`: pyannote.audio 用の Hugging Face Token を明示指定（環境変数 `PYANNOTE_TOKEN` でも可）。
+- `--zunda-senior-job` / `--zunda-junior-job`: ずんだもんの自己紹介（憧れの職業/現在の役割）を挿入します。
+
 ## characters の追加方法
 `characters/<id>/` ディレクトリを作り、`meta.yaml` と `examples.json` を配置します。`meta.yaml` では VOICEVOX の `speaker_id` を設定し、口調情報や定型句を登録してください。`examples.json` には短文例を配列で追加します。
 
 ## 出力
 - 常に: `out/<入力ファイル名>_report.wav`
 - `--mp3` 指定時: `out/<入力ファイル名>_report.mp3`
+
+各ステップの中間生成物は `work/<run_id>/` に保存されます。`seg_*.wav` には VOICEVOX で生成した発話ごとの音声、`stylized.json` にはキャラクターや挿入フレーズを反映したセグメントが含まれます。
 
 ## 中断からの再開
 `work/<run_id>/` に残っている中間生成物を利用して、途中から処理を続行できます。
