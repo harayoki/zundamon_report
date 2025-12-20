@@ -3,4 +3,5 @@ __pycache__/
 *.pyc
 work/
 out/
+temp/
 .DS_Store
