@@ -146,10 +146,20 @@ def _map_speakers(
 
 def run_pipeline(config: PipelineConfig) -> None:
     work_dir, out_dir = _ensure_paths()
+    resume = config.resume_run_id is not None
     run_id = config.resume_run_id or time.strftime("%Y%m%d-%H%M%S")
     run_dir = work_dir / run_id
 
-    if config.resume_run_id:
+    if not resume:
+        # Avoid accidental reuse when multiple runs start within the same second.
+        suffix = 1
+        base_id = run_id
+        while run_dir.exists():
+            run_id = f"{base_id}-{suffix}"
+            run_dir = work_dir / run_id
+            suffix += 1
+
+    if resume:
         if not run_dir.exists():
             raise FileNotFoundError(f"指定された run_id が見つかりませんでした: {run_id}")
         print(f"[reportvox] resuming run id: {run_id}")
@@ -160,7 +170,7 @@ def run_pipeline(config: PipelineConfig) -> None:
     audio.ensure_ffmpeg()
 
     print(f"[reportvox] run id: {run_id}")
-    existing_input = _find_existing_input(run_dir)
+    existing_input = _find_existing_input(run_dir) if resume else None
     if existing_input:
         input_path = existing_input
         print(f"[reportvox] found existing input copy -> {input_path.name}")
@@ -169,13 +179,13 @@ def run_pipeline(config: PipelineConfig) -> None:
         input_path = _copy_input(config.input_audio, run_dir)
 
     normalized_input = run_dir / "input.wav"
-    if normalized_input.exists():
+    if resume and normalized_input.exists():
         print("[reportvox] using existing normalized wav.")
     else:
         audio.normalize_to_wav(input_path, normalized_input)
 
     transcript_path = run_dir / "transcript.json"
-    if transcript_path.exists():
+    if resume and transcript_path.exists():
         print("[reportvox] loading existing transcript...")
         whisper_result = _load_transcription(transcript_path)
     else:
@@ -184,7 +194,7 @@ def run_pipeline(config: PipelineConfig) -> None:
         transcript_path.write_text(json.dumps(whisper_result.as_json(), ensure_ascii=False, indent=2), encoding="utf-8")
 
     diarization_path = run_dir / "diarization.json"
-    if diarization_path.exists():
+    if resume and diarization_path.exists():
         print(f"[reportvox] loading existing diarization ({config.speakers})...")
         diarization = _load_diarization(diarization_path)
     else:
@@ -206,7 +216,7 @@ def run_pipeline(config: PipelineConfig) -> None:
     mapped = _map_speakers(aligned, totals, config.speakers, char1, char2)
 
     stylized_path = run_dir / "stylized.json"
-    if stylized_path.exists():
+    if resume and stylized_path.exists():
         print("[reportvox] loading stylized segments...")
         stylized = _load_stylized(stylized_path)
     else:
@@ -226,7 +236,7 @@ def run_pipeline(config: PipelineConfig) -> None:
         characters={char1.id: char1, char2.id: char2},
         base_url=config.voicevox_url,
         run_dir=run_dir,
-        skip_existing=config.resume_run_id is not None,
+        skip_existing=resume,
     )
 
     output_wav = out_dir / f"{config.input_audio.stem}_report.wav"
