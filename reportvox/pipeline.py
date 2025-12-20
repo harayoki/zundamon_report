@@ -166,6 +166,19 @@ def run_pipeline(config: PipelineConfig) -> None:
     else:
         run_dir.mkdir(parents=True, exist_ok=True)
 
+    hf_token = config.hf_token or os.environ.get("PYANNOTE_TOKEN")
+    diarization_path = run_dir / "diarization.json"
+    need_new_diarization = config.speakers != "1" and not (resume and diarization_path.exists())
+    allow_partial = False
+    if need_new_diarization and hf_token is None:
+        print("[reportvox] pyannote diarization requires a Hugging Face token (set PYANNOTE_TOKEN or --hf-token).")
+        print("[reportvox] Without the token, processing can only proceed until transcription and will then stop.")
+        reply = input("[reportvox] Continue with partial processing? [y/N]: ").strip().lower()
+        if reply not in ("y", "yes"):
+            print("[reportvox] Aborting. Please provide the Hugging Face token and re-run.")
+            return
+        allow_partial = True
+
     print("[reportvox] checking ffmpeg availability...")
     audio.ensure_ffmpeg()
 
@@ -193,7 +206,12 @@ def run_pipeline(config: PipelineConfig) -> None:
         whisper_result = transcribe.transcribe_audio(normalized_input, model_size=config.whisper_model)
         transcript_path.write_text(json.dumps(whisper_result.as_json(), ensure_ascii=False, indent=2), encoding="utf-8")
 
-    diarization_path = run_dir / "diarization.json"
+    if allow_partial:
+        print("[reportvox] Hugging Face token was not provided; stopping after transcription as requested.")
+        print(f"[reportvox] transcript saved -> {transcript_path}")
+        print(f"[reportvox] Re-run with --resume {run_id} after setting PYANNOTE_TOKEN or --hf-token to continue.")
+        return
+
     if resume and diarization_path.exists():
         print(f"[reportvox] loading existing diarization ({config.speakers})...")
         diarization = _load_diarization(diarization_path)
@@ -202,7 +220,7 @@ def run_pipeline(config: PipelineConfig) -> None:
         diarization = diarize.diarize_audio(
             normalized_input,
             mode=config.speakers,
-            hf_token=config.hf_token or os.environ.get("PYANNOTE_TOKEN"),
+            hf_token=hf_token,
             work_dir=run_dir,
         )
         diarize.save_diarization(diarization, diarization_path)
