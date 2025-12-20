@@ -33,6 +33,7 @@ class PipelineConfig:
     whisper_model: str
     llm_backend: LLMBackend
     hf_token: Optional[str] = None
+    resume_run_id: Optional[str] = None
 
 
 def _ensure_paths() -> tuple[pathlib.Path, pathlib.Path]:
@@ -49,6 +50,60 @@ def _copy_input(input_audio: pathlib.Path, run_dir: pathlib.Path) -> pathlib.Pat
     dest = run_dir / f"input{input_audio.suffix}"
     shutil.copy2(input_audio, dest)
     return dest
+
+
+def _find_existing_input(run_dir: pathlib.Path) -> pathlib.Path | None:
+    for path in run_dir.glob("input.*"):
+        return path
+    return None
+
+
+def _load_transcription(path: pathlib.Path) -> transcribe.TranscriptionResult:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    segments = [
+        {"start": float(seg.get("start", 0.0)), "end": float(seg.get("end", 0.0)), "text": str(seg.get("text", ""))}
+        for seg in data.get("segments", [])
+    ]
+    text = str(data.get("text", ""))
+    return transcribe.TranscriptionResult(segments=segments, text=text)
+
+
+def _load_diarization(path: pathlib.Path) -> list[diarize.DiarizedSegment]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    segments: list[diarize.DiarizedSegment] = []
+    for item in data:
+        segments.append(
+            diarize.DiarizedSegment(
+                start=float(item.get("start", 0.0)),
+                end=float(item.get("end", 0.0)),
+                speaker=item.get("speaker", "A"),  # type: ignore[arg-type]
+            )
+        )
+    return segments
+
+
+def _save_stylized(segments: Sequence[style_convert.StylizedSegment], path: pathlib.Path) -> None:
+    data = [
+        {"start": seg.start, "end": seg.end, "text": seg.text, "speaker": seg.speaker, "character": seg.character}
+        for seg in segments
+    ]
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _load_stylized(path: pathlib.Path) -> list[style_convert.StylizedSegment]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    segments: list[style_convert.StylizedSegment] = []
+    for item in data:
+        segments.append(
+            style_convert.StylizedSegment(
+                start=float(item.get("start", 0.0)),
+                end=float(item.get("end", 0.0)),
+                text=str(item.get("text", "")),
+                speaker=str(item.get("speaker", "")),
+                character=str(item.get("character", "")),
+            )
+        )
+    return segments
 
 
 def _summarize_speaker_durations(aligned: Sequence[diarize.AlignedSegment]) -> Dict[str, float]:
@@ -91,31 +146,56 @@ def _map_speakers(
 
 def run_pipeline(config: PipelineConfig) -> None:
     work_dir, out_dir = _ensure_paths()
-    run_id = time.strftime("%Y%m%d-%H%M%S")
+    run_id = config.resume_run_id or time.strftime("%Y%m%d-%H%M%S")
     run_dir = work_dir / run_id
-    run_dir.mkdir(parents=True, exist_ok=True)
+
+    if config.resume_run_id:
+        if not run_dir.exists():
+            raise FileNotFoundError(f"指定された run_id が見つかりませんでした: {run_id}")
+        print(f"[reportvox] resuming run id: {run_id}")
+    else:
+        run_dir.mkdir(parents=True, exist_ok=True)
 
     print("[reportvox] checking ffmpeg availability...")
     audio.ensure_ffmpeg()
 
     print(f"[reportvox] run id: {run_id}")
-    print(f"[reportvox] copying input...")
-    input_path = _copy_input(config.input_audio, run_dir)
+    existing_input = _find_existing_input(run_dir)
+    if existing_input:
+        input_path = existing_input
+        print(f"[reportvox] found existing input copy -> {input_path.name}")
+    else:
+        print(f"[reportvox] copying input...")
+        input_path = _copy_input(config.input_audio, run_dir)
+
     normalized_input = run_dir / "input.wav"
-    audio.normalize_to_wav(input_path, normalized_input)
+    if normalized_input.exists():
+        print("[reportvox] using existing normalized wav.")
+    else:
+        audio.normalize_to_wav(input_path, normalized_input)
 
-    print(f"[reportvox] transcribing with Whisper ({config.whisper_model})...")
-    whisper_result = transcribe.transcribe_audio(normalized_input, model_size=config.whisper_model)
-    (run_dir / "transcript.json").write_text(json.dumps(whisper_result.as_json(), ensure_ascii=False, indent=2), encoding="utf-8")
+    transcript_path = run_dir / "transcript.json"
+    if transcript_path.exists():
+        print("[reportvox] loading existing transcript...")
+        whisper_result = _load_transcription(transcript_path)
+    else:
+        print(f"[reportvox] transcribing with Whisper ({config.whisper_model})...")
+        whisper_result = transcribe.transcribe_audio(normalized_input, model_size=config.whisper_model)
+        transcript_path.write_text(json.dumps(whisper_result.as_json(), ensure_ascii=False, indent=2), encoding="utf-8")
 
-    print(f"[reportvox] diarizing speakers ({config.speakers})...")
-    diarization = diarize.diarize_audio(
-        normalized_input,
-        mode=config.speakers,
-        hf_token=config.hf_token or os.environ.get("PYANNOTE_TOKEN"),
-        work_dir=run_dir,
-    )
-    diarize.save_diarization(diarization, run_dir / "diarization.json")
+    diarization_path = run_dir / "diarization.json"
+    if diarization_path.exists():
+        print(f"[reportvox] loading existing diarization ({config.speakers})...")
+        diarization = _load_diarization(diarization_path)
+    else:
+        print(f"[reportvox] diarizing speakers ({config.speakers})...")
+        diarization = diarize.diarize_audio(
+            normalized_input,
+            mode=config.speakers,
+            hf_token=config.hf_token or os.environ.get("PYANNOTE_TOKEN"),
+            work_dir=run_dir,
+        )
+        diarize.save_diarization(diarization, diarization_path)
 
     aligned = diarize.align_segments(whisper_result.segments, diarization)
     totals = _summarize_speaker_durations(aligned)
@@ -125,14 +205,20 @@ def run_pipeline(config: PipelineConfig) -> None:
     char2 = characters.load_character(config.speaker2)
     mapped = _map_speakers(aligned, totals, config.speakers, char1, char2)
 
-    print("[reportvox] converting style and inserting phrases...")
-    stylized = style_convert.apply_style(mapped, char1, char2, backend=config.llm_backend)
-    stylized = _maybe_prepend_intro(
-        stylized,
-        char1=char1,
-        senior_job=config.zunda_senior_job,
-        junior_job=config.zunda_junior_job,
-    )
+    stylized_path = run_dir / "stylized.json"
+    if stylized_path.exists():
+        print("[reportvox] loading stylized segments...")
+        stylized = _load_stylized(stylized_path)
+    else:
+        print("[reportvox] converting style and inserting phrases...")
+        stylized = style_convert.apply_style(mapped, char1, char2, backend=config.llm_backend)
+        stylized = _maybe_prepend_intro(
+            stylized,
+            char1=char1,
+            senior_job=config.zunda_senior_job,
+            junior_job=config.zunda_junior_job,
+        )
+        _save_stylized(stylized, stylized_path)
 
     print("[reportvox] synthesizing with VoiceVox...")
     synthesized_paths = voicevox.synthesize_segments(
@@ -140,6 +226,7 @@ def run_pipeline(config: PipelineConfig) -> None:
         characters={char1.id: char1, char2.id: char2},
         base_url=config.voicevox_url,
         run_dir=run_dir,
+        skip_existing=config.resume_run_id is not None,
     )
 
     output_wav = out_dir / f"{config.input_audio.stem}_report.wav"

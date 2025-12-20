@@ -53,6 +53,9 @@ python -m reportvox input.wav --speakers 2 --speaker1 zundamon --speaker2 metan
 # MP3 も生成
 python -m reportvox input.wav --mp3 --bitrate 192k
 
+# 中断したワークフローを再開（work/<run_id> を指定）
+python -m reportvox input.wav --resume 20240101-120000
+
 # 動画ファイル（音声トラックあり）も入力可
 python -m reportvox input.mp4 --speakers auto --mp3
 
@@ -66,6 +69,13 @@ python -m reportvox input.wav --voicevox-url http://127.0.0.1:50021
 ## 出力
 - 常に: `out/<入力ファイル名>_report.wav`
 - `--mp3` 指定時: `out/<入力ファイル名>_report.mp3`
+
+## 中断からの再開
+`work/<run_id>/` に残っている中間生成物を利用して、途中から処理を続行できます。
+
+- `--resume <run_id>` を指定すると、既存の `transcript.json`/`diarization.json`/`stylized.json`/`seg_*.wav` を再利用し、足りない工程だけ再実行します。
+- 失敗時や `--keep-work` を付けて終了した場合、`work/` に残った run_id を指定してください。
+- run_id は実行開始時に `[reportvox] run id: <run_id>` という形で表示されます。
 
 ## 注意事項
 - VOICEVOX が起動していない場合、合成でエラーとなります。
