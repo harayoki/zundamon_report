@@ -20,7 +20,7 @@ LLMBackend = Literal["none", "openai", "local"]
 
 @dataclass
 class PipelineConfig:
-    input_audio: pathlib.Path
+    input_audio: pathlib.Path | None
     voicevox_url: str
     speakers: SpeakerMode
     speaker1: str
@@ -183,13 +183,18 @@ def run_pipeline(config: PipelineConfig) -> None:
     audio.ensure_ffmpeg()
 
     print(f"[reportvox] run id: {run_id}")
+    if not resume and config.input_audio is None:
+        raise ValueError("input_audio must be provided when not resuming")
+
     existing_input = _find_existing_input(run_dir) if resume else None
     if existing_input:
         input_path = existing_input
         print(f"[reportvox] found existing input copy -> {input_path.name}")
-    else:
+    elif config.input_audio is not None:
         print(f"[reportvox] copying input...")
         input_path = _copy_input(config.input_audio, run_dir)
+    else:
+        raise FileNotFoundError("入力ファイルが見つかりません (--resume 先に input.* が存在しません)")
 
     normalized_input = run_dir / "input.wav"
     if resume and normalized_input.exists():
@@ -257,12 +262,13 @@ def run_pipeline(config: PipelineConfig) -> None:
         skip_existing=resume,
     )
 
-    output_wav = out_dir / f"{config.input_audio.stem}_report.wav"
+    base_stem = (config.input_audio or input_path).stem
+    output_wav = out_dir / f"{base_stem}_report.wav"
     print(f"[reportvox] joining audio -> {output_wav}")
     audio.join_wavs(synthesized_paths, output_wav)
 
     if config.want_mp3:
-        mp3_path = out_dir / f"{config.input_audio.stem}_report.mp3"
+        mp3_path = out_dir / f"{base_stem}_report.mp3"
         print(f"[reportvox] generating mp3 -> {mp3_path}")
         audio.convert_to_mp3(output_wav, mp3_path, bitrate=config.mp3_bitrate)
 

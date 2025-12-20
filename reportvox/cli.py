@@ -14,7 +14,11 @@ def build_parser() -> argparse.ArgumentParser:
         prog="reportvox",
         description="Audio to diarized, character-styled VoiceVox report generator.",
     )
-    parser.add_argument("input", help="Input audio/video file path (audio track required).")
+    parser.add_argument(
+        "input",
+        nargs="?",
+        help="Input audio/video file path (audio track required). Required unless --resume is used.",
+    )
     parser.add_argument("--voicevox-url", default="http://127.0.0.1:50021", help="VoiceVox Engine base URL.")
     parser.add_argument(
         "--speakers",
@@ -51,8 +55,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
-    args = build_parser().parse_args(argv)
-    input_path = pathlib.Path(args.input).expanduser().resolve()
+    parser = build_parser()
+    args = parser.parse_args(argv)
+
+    if args.input is None and args.resume_run_id is None:
+        parser.error("input file is required unless --resume is provided")
+
+    input_path = pathlib.Path(args.input).expanduser().resolve() if args.input else None
     return PipelineConfig(
         input_audio=input_path,
         voicevox_url=args.voicevox_url,
