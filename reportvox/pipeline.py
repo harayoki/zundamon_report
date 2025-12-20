@@ -18,6 +18,41 @@ SpeakerMode = Literal["auto", "1", "2"]
 LLMBackend = Literal["none", "openai", "local"]
 
 
+class _ProgressReporter:
+    def __init__(self) -> None:
+        self._start = time.monotonic()
+
+    def elapsed(self) -> float:
+        return time.monotonic() - self._start
+
+    def _format_duration(self, seconds: float) -> str:
+        seconds = max(0.0, seconds)
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        if hours:
+            return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+        return f"{minutes:02d}:{secs:02d}"
+
+    def log(self, message: str, *, step_duration: float | None = None, remaining: float | None = None) -> None:
+        parts = [f"[reportvox +{self._format_duration(self.elapsed())}] {message}"]
+        if step_duration is not None:
+            parts.append(f"(step {self._format_duration(step_duration)})")
+        if remaining is not None:
+            parts.append(f"(残り予想: {self._format_duration(remaining)})")
+        print(" ".join(parts))
+
+    def now(self) -> float:
+        return time.monotonic()
+
+
+def _estimate_remaining(total_steps: int, steps_done: int, elapsed: float) -> float | None:
+    if steps_done <= 0 or total_steps <= steps_done:
+        return None
+    avg = elapsed / steps_done
+    return avg * (total_steps - steps_done)
+
+
 @dataclass
 class PipelineConfig:
     input_audio: pathlib.Path | None
@@ -145,6 +180,7 @@ def _map_speakers(
 
 
 def run_pipeline(config: PipelineConfig) -> None:
+    reporter = _ProgressReporter()
     work_dir, out_dir = _ensure_paths()
     resume = config.resume_run_id is not None
     run_id = config.resume_run_id or time.strftime("%Y%m%d-%H%M%S")
@@ -162,7 +198,7 @@ def run_pipeline(config: PipelineConfig) -> None:
     if resume:
         if not run_dir.exists():
             raise FileNotFoundError(f"指定された run_id が見つかりませんでした: {run_id}")
-        print(f"[reportvox] resuming run id: {run_id}")
+        reporter.log(f"resuming run id: {run_id}")
     else:
         run_dir.mkdir(parents=True, exist_ok=True)
 
@@ -179,37 +215,66 @@ def run_pipeline(config: PipelineConfig) -> None:
             return
         allow_partial = True
 
-    print("[reportvox] checking ffmpeg availability...")
-    audio.ensure_ffmpeg()
+    total_steps = 4  # ffmpeg, copy input, normalize, transcribe
+    if not allow_partial:
+        total_steps += 1  # diarization load/run
+        total_steps += 1  # style conversion
+        total_steps += 1  # voicevox synthesis
+        total_steps += 1  # join wav
+        if config.want_mp3:
+            total_steps += 1
+        if not config.keep_work:
+            total_steps += 1
+    steps_done = 0
 
-    print(f"[reportvox] run id: {run_id}")
+    def _complete_step(message: str, start_time: float) -> None:
+        nonlocal steps_done
+        duration = reporter.now() - start_time
+        steps_done += 1
+        remaining = _estimate_remaining(total_steps, steps_done, reporter.elapsed())
+        reporter.log(message, step_duration=duration, remaining=remaining)
+
+    reporter.log("checking ffmpeg availability...")
+    step_start = reporter.now()
+    audio.ensure_ffmpeg()
+    _complete_step("ffmpeg availability OK.", step_start)
+
+    reporter.log(f"run id: {run_id}")
     if not resume and config.input_audio is None:
         raise ValueError("input_audio must be provided when not resuming")
 
     existing_input = _find_existing_input(run_dir) if resume else None
+    step_start = reporter.now()
     if existing_input:
         input_path = existing_input
-        print(f"[reportvox] found existing input copy -> {input_path.name}")
+        reporter.log(f"found existing input copy -> {input_path.name}")
     elif config.input_audio is not None:
-        print(f"[reportvox] copying input...")
+        reporter.log("copying input...")
         input_path = _copy_input(config.input_audio, run_dir)
+        reporter.log(f"input copied -> {input_path.name}")
     else:
         raise FileNotFoundError("入力ファイルが見つかりません (--resume 先に input.* が存在しません)")
+    _complete_step("input prepared.", step_start)
 
     normalized_input = run_dir / "input.wav"
+    step_start = reporter.now()
     if resume and normalized_input.exists():
-        print("[reportvox] using existing normalized wav.")
+        reporter.log("using existing normalized wav.")
     else:
         audio.normalize_to_wav(input_path, normalized_input)
+    _complete_step("wav normalization finished.", step_start)
 
     transcript_path = run_dir / "transcript.json"
+    step_start = reporter.now()
     if resume and transcript_path.exists():
-        print("[reportvox] loading existing transcript...")
+        reporter.log("loading existing transcript...")
         whisper_result = _load_transcription(transcript_path)
     else:
-        print(f"[reportvox] transcribing with Whisper ({config.whisper_model})...")
+        reporter.log(f"transcribing with Whisper ({config.whisper_model})... この処理は数分かかる場合があります。")
         whisper_result = transcribe.transcribe_audio(normalized_input, model_size=config.whisper_model)
         transcript_path.write_text(json.dumps(whisper_result.as_json(), ensure_ascii=False, indent=2), encoding="utf-8")
+        reporter.log("transcription completed and saved.")
+    _complete_step("transcription step finished.", step_start)
 
     if allow_partial:
         print("[reportvox] Hugging Face token was not provided; stopping after transcription as requested.")
@@ -217,11 +282,12 @@ def run_pipeline(config: PipelineConfig) -> None:
         print(f"[reportvox] Re-run with --resume {run_id} after setting PYANNOTE_TOKEN or --hf-token to continue.")
         return
 
+    step_start = reporter.now()
     if resume and diarization_path.exists():
-        print(f"[reportvox] loading existing diarization ({config.speakers})...")
+        reporter.log(f"loading existing diarization ({config.speakers})...")
         diarization = _load_diarization(diarization_path)
     else:
-        print(f"[reportvox] diarizing speakers ({config.speakers})...")
+        reporter.log(f"diarizing speakers ({config.speakers})...")
         diarization = diarize.diarize_audio(
             normalized_input,
             mode=config.speakers,
@@ -229,21 +295,23 @@ def run_pipeline(config: PipelineConfig) -> None:
             work_dir=run_dir,
         )
         diarize.save_diarization(diarization, diarization_path)
+    _complete_step("diarization step finished.", step_start)
 
     aligned = diarize.align_segments(whisper_result.segments, diarization)
     totals = _summarize_speaker_durations(aligned)
-    print(f"[reportvox] speaker durations: {totals}")
+    reporter.log(f"speaker durations: {totals}")
 
     char1 = characters.load_character(config.speaker1)
     char2 = characters.load_character(config.speaker2)
     mapped = _map_speakers(aligned, totals, config.speakers, char1, char2)
 
     stylized_path = run_dir / "stylized.json"
+    step_start = reporter.now()
     if resume and stylized_path.exists():
-        print("[reportvox] loading stylized segments...")
+        reporter.log("loading stylized segments...")
         stylized = _load_stylized(stylized_path)
     else:
-        print("[reportvox] converting style and inserting phrases...")
+        reporter.log("converting style and inserting phrases...")
         stylized = style_convert.apply_style(mapped, char1, char2, backend=config.llm_backend)
         stylized = _maybe_prepend_intro(
             stylized,
@@ -252,30 +320,51 @@ def run_pipeline(config: PipelineConfig) -> None:
             junior_job=config.zunda_junior_job,
         )
         _save_stylized(stylized, stylized_path)
+        reporter.log("style conversion finished and saved.")
+    _complete_step("style conversion step finished.", step_start)
 
-    print("[reportvox] synthesizing with VoiceVox...")
+    reporter.log("synthesizing with VoiceVox...")
+    step_start = reporter.now()
+    synth_durations: list[float] = []
+
+    def _synth_progress(done: int, total: int, duration: float) -> None:
+        synth_durations.append(duration)
+        avg = sum(synth_durations) / len(synth_durations)
+        remaining_segments = max(0, total - done)
+        remaining_time = avg * remaining_segments
+        reporter.log(f"VoiceVox {done}/{total} segments synthesized.", step_duration=duration, remaining=remaining_time)
+
     synthesized_paths = voicevox.synthesize_segments(
         stylized,
         characters={char1.id: char1, char2.id: char2},
         base_url=config.voicevox_url,
         run_dir=run_dir,
         skip_existing=resume,
+        progress=_synth_progress,
     )
+    _complete_step("VoiceVox synthesis completed.", step_start)
 
     base_stem = (config.input_audio or input_path).stem
     output_wav = out_dir / f"{base_stem}_report.wav"
-    print(f"[reportvox] joining audio -> {output_wav}")
+    reporter.log(f"joining audio -> {output_wav}")
+    step_start = reporter.now()
     audio.join_wavs(synthesized_paths, output_wav)
+    _complete_step("wav join completed.", step_start)
 
     if config.want_mp3:
         mp3_path = out_dir / f"{base_stem}_report.mp3"
-        print(f"[reportvox] generating mp3 -> {mp3_path}")
+        reporter.log(f"generating mp3 -> {mp3_path}")
+        step_start = reporter.now()
         audio.convert_to_mp3(output_wav, mp3_path, bitrate=config.mp3_bitrate)
+        _complete_step("mp3 generation completed.", step_start)
 
     if not config.keep_work:
+        reporter.log("cleaning up work directory...")
+        step_start = reporter.now()
         shutil.rmtree(run_dir, ignore_errors=True)
+        _complete_step("work directory removed.", step_start)
 
-    print("[reportvox] done.")
+    reporter.log("done.")
 
 
 def _maybe_prepend_intro(

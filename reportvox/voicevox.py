@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import json
 import pathlib
-from typing import Dict, Iterable, Sequence
+import time
+from typing import Callable, Dict, Iterable, Sequence
 
 import requests
 
@@ -37,6 +38,7 @@ def synthesize_segments(
     base_url: str,
     run_dir: pathlib.Path,
     skip_existing: bool = False,
+    progress: Callable[[int, int, float], None] | None = None,
 ) -> list[pathlib.Path]:
     outputs: list[pathlib.Path] = []
     for idx, seg in enumerate(segments):
@@ -47,10 +49,15 @@ def synthesize_segments(
             raise VoiceVoxError(f"VoiceVox speaker id is missing for character {meta.id}.")
         out_path = run_dir / f"seg_{idx:04d}.wav"
         if skip_existing and out_path.exists():
+            if progress is not None:
+                progress(idx + 1, len(segments), 0.0)
             outputs.append(out_path)
             continue
+        seg_start = time.monotonic()
         query = _request_audio_query(seg.text, meta.voicevox_speaker_id, base_url)
         audio = _request_synthesis(query, meta.voicevox_speaker_id, base_url)
         out_path.write_bytes(audio)
+        if progress is not None:
+            progress(idx + 1, len(segments), time.monotonic() - seg_start)
         outputs.append(out_path)
     return outputs
