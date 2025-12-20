@@ -32,6 +32,7 @@ pip install -r requirements.txt
 
 ## 依存サービス
 - VOICEVOX Engine（ローカル起動を想定）
+  - アプリ版ではなくエンジンを事前にダウンロードし、ポートを指定して起動しておいてください。
   - 例: `VOICEVOX_ENGINE_HOME=/path/to/engine ./run --host 127.0.0.1 --port 50021`
 - pyannote.audio の実行には Hugging Face Token が必要な場合があります。
   - 環境変数 `PYANNOTE_TOKEN` または CLI 引数 `--hf-token` で指定してください。
