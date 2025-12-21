@@ -60,6 +60,10 @@ python -m reportvox input.wav --speakers 2 --speaker1 zundamon --speaker2 metan
 # 中断したワークフローを再開（work/<run_id> を指定）
 python -m reportvox input.wav --resume 20240101-120000
 
+# 字幕 (SRT) を同時出力
+python -m reportvox input.wav --subtitles all  # 2話者を1つのファイルにまとめて出力
+python -m reportvox input.wav --subtitles split  # 話者ごとに別ファイルを出力
+
 # 動画ファイルも入力可、MP3も生成
 python -m reportvox input.mp4 --speakers auto --mp3
 ```
@@ -71,6 +75,7 @@ python -m reportvox input.mp4 --speakers auto --mp3
 - --speed-scale: VOICEVOX での読み上げ速度（デフォルト 1.0）。
 - --resume <run_id>: 中断した工程から再開。
 - --hf-token: Hugging Face Token。
+- --subtitles {off,all,split}: SRT 字幕の出力モード。off で出力なし、all ですべての発話をまとめた 1 ファイル、split で話者ごとに別ファイル。
 
 ## カスタム話者・口癖の追加
 新しいキャラクターの追加や口癖の調整方法は「[キャラクター追加・口癖設定ガイド](docs/characters.md)」にまとめています。

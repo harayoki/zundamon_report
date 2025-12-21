@@ -9,14 +9,15 @@ import shutil
 import sys
 import time
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Literal, Optional, Sequence, Tuple
+from typing import Dict, Literal, Optional, Sequence
 
-from . import diarize, transcribe, style_convert, voicevox, audio, characters
+from . import diarize, transcribe, style_convert, voicevox, audio, characters, subtitles
 from .envinfo import EnvironmentInfo, append_env_details
 
 
 SpeakerMode = Literal["auto", "1", "2"]
 LLMBackend = Literal["none", "openai", "local"]
+SubtitleMode = Literal["off", "all", "split"]
 
 
 class _ProgressReporter:
@@ -72,6 +73,7 @@ class PipelineConfig:
     hf_token: Optional[str] = None
     speed_scale: float = 1.0
     resume_run_id: Optional[str] = None
+    subtitle_mode: SubtitleMode = "off"
 
 
 def _ensure_paths() -> tuple[pathlib.Path, pathlib.Path]:
@@ -221,6 +223,8 @@ def run_pipeline(config: PipelineConfig) -> None:
     total_steps = 4  # ffmpeg 確認、入力コピー、正規化、文字起こし
     total_steps += 1  # 話者分離の読み込み/実行
     total_steps += 1  # 口調変換
+    if config.subtitle_mode != "off":
+        total_steps += 1  # 字幕生成
     total_steps += 1  # VOICEVOX 合成
     total_steps += 1  # WAV 結合
     if config.want_mp3:
@@ -329,6 +333,21 @@ def run_pipeline(config: PipelineConfig) -> None:
         reporter.log("口調変換が完了し保存しました。")
     _complete_step("口調変換工程が完了しました。", step_start)
 
+    base_stem = (config.input_audio or input_path).stem
+
+    if config.subtitle_mode != "off":
+        reporter.log("字幕ファイルを生成しています...")
+        step_start = reporter.now()
+        subtitle_paths = subtitles.write_subtitles(
+            stylized,
+            out_dir=out_dir,
+            base_stem=base_stem,
+            mode=config.subtitle_mode,
+            characters={char1.id: char1, char2.id: char2},
+        )
+        reporter.log(f"字幕を出力しました: {[p.name for p in subtitle_paths]}")
+        _complete_step("字幕ファイルの生成が完了しました。", step_start)
+
     reporter.log("VOICEVOX で音声合成を実行しています...")
     step_start = reporter.now()
     synth_durations: list[float] = []
@@ -352,7 +371,6 @@ def run_pipeline(config: PipelineConfig) -> None:
     )
     _complete_step("VOICEVOX での合成が完了しました。", step_start)
 
-    base_stem = (config.input_audio or input_path).stem
     output_wav = out_dir / f"{base_stem}_report.wav"
     reporter.log(f"音声を結合しています -> {output_wav}")
     step_start = reporter.now()
