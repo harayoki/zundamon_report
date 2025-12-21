@@ -32,6 +32,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--zunda-junior-job", dest="zunda_junior_job", default=None, help="ずんだもんの現在の役割を指定。")
     parser.add_argument("--mp3", action="store_true", help="Generate mp3 if ffmpeg is available.")
     parser.add_argument("--bitrate", default="192k", help="Bitrate for mp3 output.")
+    parser.add_argument("--ffmpeg-path", default="ffmpeg", help="Path to ffmpeg executable.")
     parser.add_argument("--keep-work", action="store_true", help="Keep intermediate files under work/.")
     parser.add_argument("--model", default="small", help="Whisper model size to use.")
     parser.add_argument(
@@ -72,6 +73,7 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
         zunda_junior_job=args.zunda_junior_job,
         want_mp3=args.mp3,
         mp3_bitrate=args.bitrate,
+        ffmpeg_path=args.ffmpeg_path,
         keep_work=args.keep_work,
         whisper_model=args.model,
         llm_backend=args.llm,

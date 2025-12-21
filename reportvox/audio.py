@@ -8,24 +8,28 @@ import wave
 from typing import Sequence
 
 
-def ensure_ffmpeg() -> None:
+def ensure_ffmpeg(ffmpeg_path: str = "ffmpeg") -> None:
     """Ensure ffmpeg is available; raise RuntimeError if not."""
     try:
         subprocess.run(
-            ["ffmpeg", "-version"],
+            [ffmpeg_path, "-version"],
             check=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
     except FileNotFoundError as exc:
-        raise RuntimeError("ffmpeg必須です。README参照。ffmpeg が見つかりません。") from exc
+        raise RuntimeError(
+            f"ffmpeg必須です。README参照。ffmpeg が見つかりません (指定: {ffmpeg_path!r})。"
+        ) from exc
     except subprocess.CalledProcessError as exc:
-        raise RuntimeError("ffmpeg必須です。README参照。ffmpeg の実行に失敗しました。") from exc
+        raise RuntimeError(
+            f"ffmpeg必須です。README参照。ffmpeg の実行に失敗しました (指定: {ffmpeg_path!r})。"
+        ) from exc
 
 
-def normalize_to_wav(src: pathlib.Path, dest: pathlib.Path) -> pathlib.Path:
+def normalize_to_wav(src: pathlib.Path, dest: pathlib.Path, *, ffmpeg_path: str = "ffmpeg") -> pathlib.Path:
     """Convert input audio to wav using ffmpeg."""
-    cmd = ["ffmpeg", "-y", "-i", str(src), str(dest)]
+    cmd = [ffmpeg_path, "-y", "-i", str(src), str(dest)]
     print("[reportvox] wav正規化開始")
     try:
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -59,9 +63,9 @@ def join_wavs(inputs: Sequence[pathlib.Path], output: pathlib.Path) -> None:
                 out_wf.writeframes(in_wf.readframes(in_wf.getnframes()))
 
 
-def convert_to_mp3(src: pathlib.Path, dest: pathlib.Path, bitrate: str = "192k") -> None:
+def convert_to_mp3(src: pathlib.Path, dest: pathlib.Path, bitrate: str = "192k", *, ffmpeg_path: str = "ffmpeg") -> None:
     cmd = [
-        "ffmpeg",
+        ffmpeg_path,
         "-y",
         "-i",
         str(src),

@@ -64,6 +64,7 @@ class PipelineConfig:
     zunda_junior_job: Optional[str]
     want_mp3: bool
     mp3_bitrate: str
+    ffmpeg_path: str
     keep_work: bool
     whisper_model: str
     llm_backend: LLMBackend
@@ -236,7 +237,7 @@ def run_pipeline(config: PipelineConfig) -> None:
 
     reporter.log("checking ffmpeg availability...")
     step_start = reporter.now()
-    audio.ensure_ffmpeg()
+    audio.ensure_ffmpeg(config.ffmpeg_path)
     _complete_step("ffmpeg availability OK.", step_start)
 
     reporter.log(f"run id: {run_id}")
@@ -261,7 +262,7 @@ def run_pipeline(config: PipelineConfig) -> None:
     if resume and normalized_input.exists():
         reporter.log("using existing normalized wav.")
     else:
-        audio.normalize_to_wav(input_path, normalized_input)
+        audio.normalize_to_wav(input_path, normalized_input, ffmpeg_path=config.ffmpeg_path)
     _complete_step("wav normalization finished.", step_start)
 
     transcript_path = run_dir / "transcript.json"
@@ -355,7 +356,7 @@ def run_pipeline(config: PipelineConfig) -> None:
         mp3_path = out_dir / f"{base_stem}_report.mp3"
         reporter.log(f"generating mp3 -> {mp3_path}")
         step_start = reporter.now()
-        audio.convert_to_mp3(output_wav, mp3_path, bitrate=config.mp3_bitrate)
+        audio.convert_to_mp3(output_wav, mp3_path, bitrate=config.mp3_bitrate, ffmpeg_path=config.ffmpeg_path)
         _complete_step("mp3 generation completed.", step_start)
 
     if not config.keep_work:
