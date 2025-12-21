@@ -10,6 +10,11 @@ from typing import Sequence
 
 def ensure_ffmpeg(ffmpeg_path: str = "ffmpeg") -> None:
     """Ensure ffmpeg is available; raise RuntimeError if not."""
+    ffmpeg_path_obj = pathlib.Path(ffmpeg_path)
+    if ffmpeg_path_obj.exists() and ffmpeg_path_obj.is_dir():
+        raise RuntimeError(
+            f"ffmpeg必須です。README参照。指定されたパスはディレクトリです (指定: {ffmpeg_path!r})。ffmpegの実行ファイルを指定してください。"
+        )
     try:
         subprocess.run(
             [ffmpeg_path, "-version"],
@@ -20,6 +25,10 @@ def ensure_ffmpeg(ffmpeg_path: str = "ffmpeg") -> None:
     except FileNotFoundError as exc:
         raise RuntimeError(
             f"ffmpeg必須です。README参照。ffmpeg が見つかりません (指定: {ffmpeg_path!r})。"
+        ) from exc
+    except PermissionError as exc:
+        raise RuntimeError(
+            f"ffmpeg必須です。README参照。指定されたパスに実行権限がないかアクセスが拒否されました (指定: {ffmpeg_path!r})。管理者権限やパスを確認してください。"
         ) from exc
     except subprocess.CalledProcessError as exc:
         raise RuntimeError(
