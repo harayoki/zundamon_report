@@ -8,43 +8,43 @@ import subprocess
 import wave
 from typing import Sequence
 
+from .envinfo import EnvironmentInfo, append_env_details, probe_ffmpeg
 
-def ensure_ffmpeg(ffmpeg_path: str = "ffmpeg") -> str:
+
+def ensure_ffmpeg(ffmpeg_path: str = "ffmpeg", *, env_info: EnvironmentInfo | None = None) -> str:
     """Ensure ffmpeg is available; return the executable path or raise RuntimeError if not."""
-    ffmpeg_path_obj = pathlib.Path(ffmpeg_path)
-    if ffmpeg_path_obj.is_dir():
-        exe_name = "ffmpeg.exe" if os.name == "nt" else "ffmpeg"
-        ffmpeg_path_obj = ffmpeg_path_obj / exe_name
-    try:
-        subprocess.run(
-            [str(ffmpeg_path_obj), "-version"],
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-    except FileNotFoundError as exc:
-        raise RuntimeError(
-            f"ffmpeg必須です。README参照。ffmpeg が見つかりません (指定: {ffmpeg_path_obj!r})。"
-        ) from exc
-    except PermissionError as exc:
-        raise RuntimeError(
-            f"ffmpeg必須です。README参照。指定されたパスに実行権限がないかアクセスが拒否されました (指定: {ffmpeg_path_obj!r})。管理者権限やパスを確認してください。"
-        ) from exc
-    except subprocess.CalledProcessError as exc:
-        raise RuntimeError(
-            f"ffmpeg必須です。README参照。ffmpeg の実行に失敗しました (指定: {ffmpeg_path_obj!r})。"
-        ) from exc
-    return str(ffmpeg_path_obj)
+    probe = probe_ffmpeg(ffmpeg_path)
+    if env_info is not None:
+        env_info.update_ffmpeg(probe)
+    if not probe.available:
+        msg = f"ffmpeg必須です。README参照。ffmpeg が見つかりません (指定: {probe.path!r})。"
+        if probe.error == "permission":
+            msg = (
+                "ffmpeg必須です。README参照。指定されたパスに実行権限がないかアクセスが拒否されました "
+                f"(指定: {probe.path!r})。管理者権限やパスを確認してください。"
+            )
+        elif probe.error == "execution_failed":
+            msg = f"ffmpeg必須です。README参照。ffmpeg の実行に失敗しました (指定: {probe.path!r})。"
+        raise RuntimeError(append_env_details(msg, env_info))
+    return str(probe.path)
 
 
-def normalize_to_wav(src: pathlib.Path, dest: pathlib.Path, *, ffmpeg_path: str = "ffmpeg") -> pathlib.Path:
+def normalize_to_wav(
+    src: pathlib.Path,
+    dest: pathlib.Path,
+    *,
+    ffmpeg_path: str = "ffmpeg",
+    env_info: EnvironmentInfo | None = None,
+) -> pathlib.Path:
     """Convert input audio to wav using ffmpeg."""
     cmd = [ffmpeg_path, "-y", "-i", str(src), str(dest)]
     print("[reportvox] wav正規化開始")
     try:
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except subprocess.CalledProcessError as exc:
-        raise RuntimeError("ffmpegによるwav正規化に失敗しました。入力に音声トラックが見つからないため変換できませんでした。") from exc
+        raise RuntimeError(
+            append_env_details("ffmpegによるwav正規化に失敗しました。入力に音声トラックが見つからないため変換できませんでした。", env_info)
+        ) from exc
     print("[reportvox] wav正規化完了")
     return dest
 
@@ -54,9 +54,9 @@ def _read_params(path: pathlib.Path) -> tuple[int, int, int, int]:
         return (wf.getnchannels(), wf.getsampwidth(), wf.getframerate(), wf.getnframes())
 
 
-def join_wavs(inputs: Sequence[pathlib.Path], output: pathlib.Path) -> None:
+def join_wavs(inputs: Sequence[pathlib.Path], output: pathlib.Path, *, env_info: EnvironmentInfo | None = None) -> None:
     if not inputs:
-        raise ValueError("No input wavs to join.")
+        raise ValueError(append_env_details("No input wavs to join.", env_info))
 
     params = _read_params(inputs[0])
     nchannels, sampwidth, framerate, _ = params
@@ -68,12 +68,19 @@ def join_wavs(inputs: Sequence[pathlib.Path], output: pathlib.Path) -> None:
         for path in inputs:
             p = _read_params(path)
             if p[:3] != params[:3]:
-                raise ValueError("Input wav parameters do not match; cannot concatenate.")
+                raise ValueError(append_env_details("Input wav parameters do not match; cannot concatenate.", env_info))
             with wave.open(str(path), "rb") as in_wf:
                 out_wf.writeframes(in_wf.readframes(in_wf.getnframes()))
 
 
-def convert_to_mp3(src: pathlib.Path, dest: pathlib.Path, bitrate: str = "192k", *, ffmpeg_path: str = "ffmpeg") -> None:
+def convert_to_mp3(
+    src: pathlib.Path,
+    dest: pathlib.Path,
+    bitrate: str = "192k",
+    *,
+    ffmpeg_path: str = "ffmpeg",
+    env_info: EnvironmentInfo | None = None,
+) -> None:
     cmd = [
         ffmpeg_path,
         "-y",
@@ -86,4 +93,4 @@ def convert_to_mp3(src: pathlib.Path, dest: pathlib.Path, bitrate: str = "192k",
     try:
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except subprocess.CalledProcessError as exc:
-        raise RuntimeError("ffmpegによるmp3生成に失敗しました。") from exc
+        raise RuntimeError(append_env_details("ffmpegによるmp3生成に失敗しました。", env_info)) from exc

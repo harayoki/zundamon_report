@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Dict, Iterable, List, Literal, Optional, Sequence, Tuple
 
 from . import diarize, transcribe, style_convert, voicevox, audio, characters
+from .envinfo import EnvironmentInfo, append_env_details
 
 
 SpeakerMode = Literal["auto", "1", "2"]
@@ -80,9 +81,9 @@ def _ensure_paths() -> tuple[pathlib.Path, pathlib.Path]:
     return work_dir, out_dir
 
 
-def _copy_input(input_audio: pathlib.Path, run_dir: pathlib.Path) -> pathlib.Path:
+def _copy_input(input_audio: pathlib.Path, run_dir: pathlib.Path, *, env_info: EnvironmentInfo | None = None) -> pathlib.Path:
     if not input_audio.exists():
-        raise FileNotFoundError(f"Input audio not found: {input_audio}")
+        raise FileNotFoundError(append_env_details(f"Input audio not found: {input_audio}", env_info))
     dest = run_dir / f"input{input_audio.suffix}"
     shutil.copy2(input_audio, dest)
     return dest
@@ -186,6 +187,7 @@ def run_pipeline(config: PipelineConfig) -> None:
     resume = config.resume_run_id is not None
     run_id = config.resume_run_id or time.strftime("%Y%m%d-%H%M%S")
     run_dir = work_dir / run_id
+    env_info = EnvironmentInfo.collect(config.ffmpeg_path, config.hf_token, os.environ.get("PYANNOTE_TOKEN"))
 
     if not resume:
         # Avoid accidental reuse when multiple runs start within the same second.
@@ -198,7 +200,7 @@ def run_pipeline(config: PipelineConfig) -> None:
 
     if resume:
         if not run_dir.exists():
-            raise FileNotFoundError(f"指定された run_id が見つかりませんでした: {run_id}")
+            raise FileNotFoundError(append_env_details(f"指定された run_id が見つかりませんでした: {run_id}", env_info))
         reporter.log(f"resuming run id: {run_id}")
     else:
         run_dir.mkdir(parents=True, exist_ok=True)
@@ -208,8 +210,11 @@ def run_pipeline(config: PipelineConfig) -> None:
     need_new_diarization = config.speakers != "1" and not (resume and diarization_path.exists())
     if need_new_diarization and hf_token is None:
         raise RuntimeError(
-            "pyannote diarization requires a Hugging Face token, but neither --hf-token nor PYANNOTE_TOKEN was set.\n"
-            f"{diarize._PYANNOTE_ACCESS_GUIDE}"
+            append_env_details(
+                "pyannote diarization requires a Hugging Face token, but neither --hf-token nor PYANNOTE_TOKEN was set.\n"
+                f"{diarize._PYANNOTE_ACCESS_GUIDE}",
+                env_info,
+            )
         )
 
     total_steps = 4  # ffmpeg, copy input, normalize, transcribe
@@ -232,13 +237,13 @@ def run_pipeline(config: PipelineConfig) -> None:
 
     reporter.log("checking ffmpeg availability...")
     step_start = reporter.now()
-    resolved_ffmpeg = audio.ensure_ffmpeg(config.ffmpeg_path)
+    resolved_ffmpeg = audio.ensure_ffmpeg(config.ffmpeg_path, env_info=env_info)
     config.ffmpeg_path = resolved_ffmpeg
     _complete_step("ffmpeg availability OK.", step_start)
 
     reporter.log(f"run id: {run_id}")
     if not resume and config.input_audio is None:
-        raise ValueError("input_audio must be provided when not resuming")
+        raise ValueError(append_env_details("input_audio must be provided when not resuming", env_info))
 
     existing_input = _find_existing_input(run_dir) if resume else None
     step_start = reporter.now()
@@ -247,10 +252,10 @@ def run_pipeline(config: PipelineConfig) -> None:
         reporter.log(f"found existing input copy -> {input_path.name}")
     elif config.input_audio is not None:
         reporter.log("copying input...")
-        input_path = _copy_input(config.input_audio, run_dir)
+        input_path = _copy_input(config.input_audio, run_dir, env_info=env_info)
         reporter.log(f"input copied -> {input_path.name}")
     else:
-        raise FileNotFoundError("入力ファイルが見つかりません (--resume 先に input.* が存在しません)")
+        raise FileNotFoundError(append_env_details("入力ファイルが見つかりません (--resume 先に input.* が存在しません)", env_info))
     _complete_step("input prepared.", step_start)
 
     normalized_input = run_dir / "input.wav"
@@ -258,7 +263,7 @@ def run_pipeline(config: PipelineConfig) -> None:
     if resume and normalized_input.exists():
         reporter.log("using existing normalized wav.")
     else:
-        audio.normalize_to_wav(input_path, normalized_input, ffmpeg_path=config.ffmpeg_path)
+        audio.normalize_to_wav(input_path, normalized_input, ffmpeg_path=config.ffmpeg_path, env_info=env_info)
     _complete_step("wav normalization finished.", step_start)
 
     transcript_path = run_dir / "transcript.json"
@@ -268,7 +273,9 @@ def run_pipeline(config: PipelineConfig) -> None:
         whisper_result = _load_transcription(transcript_path)
     else:
         reporter.log(f"transcribing with Whisper ({config.whisper_model})... この処理は数分かかる場合があります。")
-        whisper_result = transcribe.transcribe_audio(normalized_input, model_size=config.whisper_model)
+        whisper_result = transcribe.transcribe_audio(
+            normalized_input, model_size=config.whisper_model, env_info=env_info
+        )
         transcript_path.write_text(json.dumps(whisper_result.as_json(), ensure_ascii=False, indent=2), encoding="utf-8")
         reporter.log("transcription completed and saved.")
     _complete_step("transcription step finished.", step_start)
@@ -284,6 +291,7 @@ def run_pipeline(config: PipelineConfig) -> None:
             mode=config.speakers,
             hf_token=hf_token,
             work_dir=run_dir,
+            env_info=env_info,
         )
         diarize.save_diarization(diarization, diarization_path)
     _complete_step("diarization step finished.", step_start)
@@ -332,6 +340,7 @@ def run_pipeline(config: PipelineConfig) -> None:
         run_dir=run_dir,
         skip_existing=resume,
         progress=_synth_progress,
+        env_info=env_info,
     )
     _complete_step("VoiceVox synthesis completed.", step_start)
 
@@ -339,14 +348,20 @@ def run_pipeline(config: PipelineConfig) -> None:
     output_wav = out_dir / f"{base_stem}_report.wav"
     reporter.log(f"joining audio -> {output_wav}")
     step_start = reporter.now()
-    audio.join_wavs(synthesized_paths, output_wav)
+    audio.join_wavs(synthesized_paths, output_wav, env_info=env_info)
     _complete_step("wav join completed.", step_start)
 
     if config.want_mp3:
         mp3_path = out_dir / f"{base_stem}_report.mp3"
         reporter.log(f"generating mp3 -> {mp3_path}")
         step_start = reporter.now()
-        audio.convert_to_mp3(output_wav, mp3_path, bitrate=config.mp3_bitrate, ffmpeg_path=config.ffmpeg_path)
+        audio.convert_to_mp3(
+            output_wav,
+            mp3_path,
+            bitrate=config.mp3_bitrate,
+            ffmpeg_path=config.ffmpeg_path,
+            env_info=env_info,
+        )
         _complete_step("mp3 generation completed.", step_start)
 
     if not config.keep_work:
