@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import os
 from dataclasses import dataclass
@@ -61,11 +62,15 @@ def diarize_audio(
 
     _configure_hf_auth(token)
 
+    pipeline_kwargs = _build_pyannote_kwargs(PyannotePipeline, token)
+
     try:
-        pipeline = PyannotePipeline.from_pretrained("pyannote/speaker-diarization", use_auth_token=token)
-    except TypeError:
-        # pyannote.audio 3.x removed use_auth_token. Authentication is handled via huggingface_hub login/env.
-        pipeline = PyannotePipeline.from_pretrained("pyannote/speaker-diarization")
+        pipeline = PyannotePipeline.from_pretrained("pyannote/speaker-diarization", **pipeline_kwargs)
+    except Exception as exc:  # pragma: no cover - network/auth errors
+        raise RuntimeError(
+            "Failed to load pyannote/speaker-diarization. Ensure your Hugging Face token has access to the model "
+            "(https://huggingface.co/pyannote/speaker-diarization) and is passed via --hf-token or PYANNOTE_TOKEN."
+        ) from exc
     diarization = pipeline(
         str(audio_path),
         min_speakers=1 if mode == "auto" else None,
@@ -139,3 +144,9 @@ def _configure_hf_auth(token: str) -> None:
         return
 
     login(token=token, add_to_git_credential=False)
+
+
+def _build_pyannote_kwargs(pyannote_pipeline_cls, token: str) -> dict:
+    """Return kwargs supported by the installed pyannote version."""
+    signature = inspect.signature(pyannote_pipeline_cls.from_pretrained)
+    return {"use_auth_token": token} if "use_auth_token" in signature.parameters else {}
