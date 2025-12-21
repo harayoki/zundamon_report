@@ -149,4 +149,18 @@ def _configure_hf_auth(token: str) -> None:
 def _build_pyannote_kwargs(pyannote_pipeline_cls, token: str) -> dict:
     """Return kwargs supported by the installed pyannote version."""
     signature = inspect.signature(pyannote_pipeline_cls.from_pretrained)
-    return {"use_auth_token": token} if "use_auth_token" in signature.parameters else {}
+    params = signature.parameters
+
+    if "token" in params:
+        return {"token": token}
+
+    if "use_auth_token" in params:
+        return {"use_auth_token": token}
+
+    if "hf_token" in params:
+        return {"hf_token": token}
+
+    if any(param.kind == inspect.Parameter.VAR_KEYWORD for param in params.values()):
+        return {"token": token}
+
+    return {}
