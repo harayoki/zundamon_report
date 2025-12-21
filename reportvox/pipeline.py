@@ -286,13 +286,19 @@ def run_pipeline(config: PipelineConfig) -> None:
         diarization = _load_diarization(diarization_path)
     else:
         reporter.log(f"話者分離を実行しています ({config.speakers})...")
-        diarization = diarize.diarize_audio(
-            normalized_input,
-            mode=config.speakers,
-            hf_token=hf_token,
-            work_dir=run_dir,
-            env_info=env_info,
-        )
+        with diarize.torchcodec_warning_detector() as torchcodec_warning:
+            diarization = diarize.diarize_audio(
+                normalized_input,
+                mode=config.speakers,
+                hf_token=hf_token,
+                work_dir=run_dir,
+                env_info=env_info,
+            )
+        if torchcodec_warning.detected:
+            reporter.log(
+                "TorchCodec/libtorchcodec に関する警告を検出しました。FFmpeg の共有DLLや TorchCodec の互換バージョンが不足していると出ることがあります。"
+                " 警告だけならそのまま続行しても構いませんが、話者分離に失敗する場合は README の TorchCodec 対処を確認してください。"
+            )
         diarize.save_diarization(diarization, diarization_path)
     _complete_step("話者分離工程が完了しました。", step_start)
 

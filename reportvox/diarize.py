@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import contextlib
 import inspect
 import json
 import os
+import warnings
 from dataclasses import dataclass
 from typing import Iterable, List, Literal, Optional, Sequence
 
@@ -29,6 +31,32 @@ _TORCHCODEC_TROUBLESHOOT = """TorchCodec が FFmpeg の共有DLLを見つけら�
 
 SpeakerLabel = Literal["A", "B"]
 Mode = Literal["auto", "1", "2"]
+
+
+@dataclass
+class TorchcodecWarningStatus:
+    detected: bool = False
+
+
+@contextlib.contextmanager
+def torchcodec_warning_detector() -> Iterable[TorchcodecWarningStatus]:
+    """libtorchcodec 関連の警告発生を検知するためのコンテキスト。
+
+    警告自体は元の挙動のまま表示しつつ、検知フラグだけを立てる。
+    """
+    status = TorchcodecWarningStatus()
+    original_showwarning = warnings.showwarning
+
+    def _showwarning(message, category, filename, lineno, file=None, line=None):
+        if "torchcodec" in str(message).lower():
+            status.detected = True
+        original_showwarning(message, category, filename, lineno, file=file, line=line)
+
+    warnings.showwarning = _showwarning
+    try:
+        yield status
+    finally:
+        warnings.showwarning = original_showwarning
 
 
 @dataclass
