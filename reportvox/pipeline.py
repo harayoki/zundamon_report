@@ -237,7 +237,8 @@ def run_pipeline(config: PipelineConfig) -> None:
 
     reporter.log("checking ffmpeg availability...")
     step_start = reporter.now()
-    audio.ensure_ffmpeg(config.ffmpeg_path)
+    resolved_ffmpeg = audio.ensure_ffmpeg(config.ffmpeg_path)
+    config.ffmpeg_path = resolved_ffmpeg
     _complete_step("ffmpeg availability OK.", step_start)
 
     reporter.log(f"run id: {run_id}")
