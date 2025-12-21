@@ -8,7 +8,7 @@ import os
 from dataclasses import dataclass
 from typing import Iterable, List, Literal, Optional, Sequence
 
-import numpy as np
+from .envinfo import EnvironmentInfo, append_env_details
 
 
 _PYANNOTE_ACCESS_GUIDE = """\
@@ -54,6 +54,8 @@ def diarize_audio(
     mode: Mode,
     hf_token: Optional[str],
     work_dir,
+    *,
+    env_info: EnvironmentInfo | None = None,
 ) -> list[DiarizedSegment]:
     if mode == "1":
         return [DiarizedSegment(start=0.0, end=1e9, speaker="A")]
@@ -61,13 +63,18 @@ def diarize_audio(
     try:
         from pyannote.audio import Pipeline as PyannotePipeline
     except Exception as exc:  # pragma: no cover - import guard
-        raise RuntimeError("pyannote.audio is required for diarization. Please install dependencies.") from exc
+        raise RuntimeError(
+            append_env_details("pyannote.audio is required for diarization. Please install dependencies.", env_info)
+        ) from exc
 
     token = hf_token
     if token is None:
         raise RuntimeError(
-            "Hugging Face token is required for pyannote diarization (set --hf-token or PYANNOTE_TOKEN).\n"
-            f"{_PYANNOTE_ACCESS_GUIDE}"
+            append_env_details(
+                "Hugging Face token is required for pyannote diarization (set --hf-token or PYANNOTE_TOKEN).\n"
+                f"{_PYANNOTE_ACCESS_GUIDE}",
+                env_info,
+            )
         )
 
     _configure_hf_auth(token)
@@ -78,10 +85,13 @@ def diarize_audio(
         pipeline = PyannotePipeline.from_pretrained("pyannote/speaker-diarization", **pipeline_kwargs)
     except Exception as exc:  # pragma: no cover - network/auth errors
         raise RuntimeError(
-            "Failed to authenticate to pyannote/speaker-diarization even though a Hugging Face token was provided.\n"
-            "Please confirm that the account associated with the token has accepted the model terms and that the token "
-            "retains access permissions.\n"
-            f"{_PYANNOTE_ACCESS_GUIDE}"
+            append_env_details(
+                "Failed to authenticate to pyannote/speaker-diarization even though a Hugging Face token was provided.\n"
+                "Please confirm that the account associated with the token has accepted the model terms and that the token "
+                "retains access permissions.\n"
+                f"{_PYANNOTE_ACCESS_GUIDE}",
+                env_info,
+            )
         ) from exc
     diarization = pipeline(
         str(audio_path),
