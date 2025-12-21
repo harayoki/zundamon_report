@@ -63,6 +63,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="pyannote.audio 用の Hugging Face Token（環境変数 PYANNOTE_TOKEN も参照）。",
     )
+    parser.add_argument(
+        "--subtitles",
+        choices=["off", "all", "split"],
+        default="off",
+        help="字幕データの出力モード: off で生成なし / all ですべての発話を1ファイルに / split で話者ごとに別ファイルへ保存。",
+    )
     return parser
 
 
@@ -91,6 +97,7 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
         hf_token=args.hf_token,
         speed_scale=args.speed_scale,
         resume_run_id=args.resume_run_id,
+        subtitle_mode=args.subtitles,
     )
 
 
