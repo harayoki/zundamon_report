@@ -1,12 +1,13 @@
 # ReportVox
 
-ReportVox は、音声ファイルを「文字起こし → 話者分離 → 口調変換 → VOICEVOX での音声生成 → WAV/MP3 出力」まで自動化する CLI ツールです。 NotebookLM などが生成する m4a を扱うため ffmpeg は必須です。
+ReportVox は、音声ファイルを「文字起こし → 話者分離 → 口調変換 → VOICEVOX での音声生成 → WAV/MP3 出力」まで自動化する CLI ツールです。 
 
 ## ⚠️ 依存関係に関する重要な注意事項
+ffmpeg が ファイルフォーマット変換と 話者分離処理に使われます。
 現在、Windows 環境において pyannote.audio と PyTorch 周辺ライブラリの間に深刻な互換性問題が複数確認されています。 本ツールではこれらを回避するためのパッチを内蔵していますが、以下の環境構築が必須となります。
 
 ### 1. NumPy のバージョン固定
-NumPy 2.0 以降では話者分離がクラッシュするため、1.26.x 系を強制してください。
+NumPy 2.0 以降では話者分離処理時にエラーが起こるため、1.26.x 系を強制してください。
 ```bash
 pip install "numpy<2"
 ```
@@ -14,7 +15,7 @@ pip install "numpy<2"
 ### 2. FFmpeg Shared 版の導入 (Windows 必須)
 話者分離（torchcodec）の動作には、Shared 版（共有DLL版）の FFmpeg が必須です。
 - 取得元: gyan.dev から "release full shared" を選択。
-- 設定: 解凍した bin フォルダのパスを環境変数 FFMPEG_SHARED_PATH に設定してください。
+- 設定: 解凍した bin フォルダのパスを環境変数のPATHに設定します。それでもエラーが起こる場合は FFMPEG_SHARED_PATH 環境変数も同じ内容で設定してください。
   ```bash
   # 例 (Git Bash)
   export FFMPEG_SHARED_PATH="F:/Program Files/ffmpeg-7.1.1-full_build-shared/bin"
@@ -38,11 +39,12 @@ pip install "numpy<2"
 ### pyannote.audio の認証
 話者分離機能（--speakers auto/2）を利用するには、Hugging Face の Classic Token (Read) が必要です。
 
-1. 以下のリポジトリですべて利用規約に同意（Accept）してください：
+1. 以下のリポジトリですべて利用規約に同意（Accept）してください。
    - pyannote/speaker-diarization-3.1
    - pyannote/segmentation-3.0
-2. Hugging Face Settings でトークンを作成。
-3. トークンを環境変数 PYANNOTE_TOKEN または --hf-token で渡してください。
+2. その他認証が求められるエラーが表示された場合も各ページで利用規約に同意してください。
+3.  Hugging Face Settings でトークンを作成。
+4. トークンを環境変数 PYANNOTE_TOKEN または --hf-token で渡してください。
 
 ## 使い方 (コマンド例)
 ```bash
