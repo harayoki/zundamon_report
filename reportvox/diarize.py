@@ -10,6 +10,13 @@ from typing import Iterable, List, Literal, Optional, Sequence
 
 import numpy as np
 
+
+_PYANNOTE_ACCESS_GUIDE = """\
+To enable diarization, please:
+  1. Accept the user conditions at https://huggingface.co/pyannote/speaker-diarization and https://huggingface.co/pyannote/segmentation
+  2. Create an access token at https://huggingface.co/settings/tokens
+  3. Pass the token via --hf-token or the PYANNOTE_TOKEN environment variable"""
+
 SpeakerLabel = Literal["A", "B"]
 Mode = Literal["auto", "1", "2"]
 
@@ -58,7 +65,10 @@ def diarize_audio(
 
     token = hf_token
     if token is None:
-        raise RuntimeError("Hugging Face token is required for pyannote diarization (set --hf-token or PYANNOTE_TOKEN).")
+        raise RuntimeError(
+            "Hugging Face token is required for pyannote diarization (set --hf-token or PYANNOTE_TOKEN).\n"
+            f"{_PYANNOTE_ACCESS_GUIDE}"
+        )
 
     _configure_hf_auth(token)
 
@@ -69,7 +79,8 @@ def diarize_audio(
     except Exception as exc:  # pragma: no cover - network/auth errors
         raise RuntimeError(
             "Failed to load pyannote/speaker-diarization. Ensure your Hugging Face token has access to the model "
-            "(https://huggingface.co/pyannote/speaker-diarization) and is passed via --hf-token or PYANNOTE_TOKEN."
+            "(https://huggingface.co/pyannote/speaker-diarization) and is passed via --hf-token or PYANNOTE_TOKEN.\n"
+            f"{_PYANNOTE_ACCESS_GUIDE}"
         ) from exc
     diarization = pipeline(
         str(audio_path),

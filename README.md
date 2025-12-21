@@ -36,6 +36,10 @@ pip install -r requirements.txt
   - 例: `VOICEVOX_ENGINE_HOME=/path/to/engine ./run --host 127.0.0.1 --port 50021`
 - pyannote.audio の実行には Hugging Face Token が必要な場合があります。
   - 環境変数 `PYANNOTE_TOKEN` または CLI 引数 `--hf-token` で指定してください。
+  - 事前に以下の手順でアクセス権を付与してください:
+    1. https://huggingface.co/pyannote/speaker-diarization と https://huggingface.co/pyannote/segmentation で利用規約に同意する
+    2. https://huggingface.co/settings/tokens でアクセストークンを作成する
+    3. 作成したトークンを `PYANNOTE_TOKEN` 環境変数または `--hf-token` で渡す
   - 環境変数の設定例:
     - Windows PowerShell: `setx PYANNOTE_TOKEN "hf_xxx"`
     - Windows コマンドプロンプト（DOS 窓）: `set PYANNOTE_TOKEN=hf_xxx`
