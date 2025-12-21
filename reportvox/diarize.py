@@ -124,16 +124,24 @@ def diarize_audio(
     pipeline_kwargs = _build_pyannote_kwargs(PyannotePipeline, token)
 
     try:
-        pipeline = PyannotePipeline.from_pretrained("pyannote/speaker-diarization", **pipeline_kwargs)
-    except Exception as exc:  # pragma: no cover - network/auth errors
+        # 内部サブモデルとの不整合を避けるため、最新の安定版 3.1 を明示的に指定します
+        pipeline = PyannotePipeline.from_pretrained(
+            "pyannote/speaker-diarization-3.1",
+            **pipeline_kwargs
+        )
+    except Exception as exc:
         raise RuntimeError(
             append_env_details(
-                "Hugging Face Token は指定されていますが pyannote/speaker-diarization への認証に失敗しました。\n"
-                "Token を発行したアカウントで利用規約に同意しているか、権限が失効していないかを確認してください。\n"
-                f"{_PYANNOTE_ACCESS_STEPS}\n{_PYANNOTE_TOKEN_USAGE}",
+                "Hugging Face 認証に失敗しました。以下の 4 箇所すべてで規約同意済みか確認してください。\n"
+                "1. https://huggingface.co/pyannote/speaker-diarization-3.1\n"
+                "2. https://huggingface.co/pyannote/segmentation-3.0\n"
+                "3. https://huggingface.co/pyannote/segmentation\n"
+                "4. https://huggingface.co/pyannote/speaker-diarization-community-1\n"
+                "※Token は 'Classic (Read)' を使用してください。",
                 env_info,
             )
         ) from exc
+
     try:
         diarization = pipeline(
             str(audio_path),

@@ -39,15 +39,27 @@ pip install -r requirements.txt
 ### pyannote.audio の実行には Hugging Face Token が必要です
 話者分離機能（`--speakers auto/2`）を利用する場合、Hugging Face の **Classic Token (Read)** が必要です。
 
-1. **4つのリポジトリすべて**で利用規約に同意（Accept）してください：
-   - [pyannote/speaker-diarization-3.1](https://huggingface.co/pyannote/speaker-diarization-3.1) (メイン)
+1. **以下の 4 つのリポジトリすべて**で利用規約に同意（Accept）してください：
+   - [pyannote/speaker-diarization-3.1](https://huggingface.co/pyannote/speaker-diarization-3.1) (推奨・メイン)
    - [pyannote/segmentation-3.0](https://huggingface.co/pyannote/segmentation-3.0) (分析モデル)
    - [pyannote/segmentation](https://huggingface.co/pyannote/segmentation) (基盤モデル)
    - [pyannote/speaker-diarization-community-1](https://huggingface.co/pyannote/speaker-diarization-community-1) (コミュニティデータ)
 2. [Hugging Face Settings](https://huggingface.co/settings/tokens) で **New token** を作成します。
-   - **重要：** Token type は **Classic** の **Read** を推奨します。
-   - ※Fine-grained token を使用する場合は、上記4つのリポジトリすべてに Read 権限を付与してください。
+   - **重要：** Token type は **Classic**、権限は **Read** を選択してください。
+   - ※Fine-grained token を使用すると、新しいモデルが追加されるたびに手動で権限を追加する必要があるため推奨しません。
 3. 作成したトークンを環境変数 `PYANNOTE_TOKEN` または `--hf-token` で渡してください。
+
+### FFmpeg の導入 (Windows の場合)
+pyannote.audio (TorchCodec) が動作するために、**Shared 版** の FFmpeg が必須です。
+- [gyan.dev](https://www.gyan.dev/ffmpeg/builds/) から、名前に **"shared"** と入っている zip/7z を選んでください（例: `ffmpeg-release-full-shared.7z`）。
+- 解凍した `bin` フォルダを環境変数 PATH に追加してください。
+- `essentials_build` や `full_build` では DLL が不足しており動作しません。
+
+### FFmpeg Shared版の探し方（Gyan.dev）
+1. https://www.gyan.dev/ffmpeg/builds/ を開く
+2. 真ん中あたりの "release builds" セクションを見る
+3. **"release full shared"** というリンク（.7z）をクリックする
+   - ※ "essentials" や "full" (sharedなし) は DLL が足りないため不可
 
 ## 使い方
 ```bash
