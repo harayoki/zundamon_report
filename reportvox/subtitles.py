@@ -31,17 +31,64 @@ def _build_line_text(segment: StylizedSegment, characters: Dict[str, CharacterMe
     return segment.text
 
 
-def _write_srt(segments: Sequence[StylizedSegment], path: pathlib.Path, characters: Dict[str, CharacterMeta], *, include_label: bool) -> None:
+def _write_srt(segments: Sequence[StylizedSegment], path: pathlib.Path) -> None:
     lines: List[str] = []
-    for idx, seg in enumerate(segments, 1):
+    counter = 1
+    for seg in segments:
         start = _format_timestamp(seg.start)
         end = _format_timestamp(seg.end)
-        text = _build_line_text(seg, characters, include_label=include_label)
-        lines.append(str(idx))
+        lines.append(str(counter))
         lines.append(f"{start} --> {end}")
-        lines.append(text)
+        lines.append(seg.text)
         lines.append("")
+        counter += 1
     path.write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
+
+
+def _split_text(text: str, include_label: bool, *, max_chars: int | None = None) -> list[str]:
+    """テキストを字幕用に分割する。
+
+    include_label が True の場合は先頭のラベルを優先してまとめるため、ラベル部分を分割しない。
+    """
+    if not max_chars or max_chars <= 0:
+        return [text]
+
+    prefix = ""
+    content = text
+    if include_label and text.startswith("【"):
+        end_idx = text.find("】")
+        if end_idx != -1:
+            prefix = text[: end_idx + 1]
+            content = text[end_idx + 1 :]
+
+    content = content.strip()
+    if not content or len(content) + len(prefix) <= max_chars:
+        return [text]
+
+    chunks: list[str] = []
+    remaining = content
+    is_first = True
+    while remaining:
+        limit = max_chars
+        if is_first and prefix:
+            limit = max(1, max_chars - len(prefix))
+        if len(remaining) + (len(prefix) if is_first else 0) <= max_chars:
+            chunk_text = remaining.strip()
+            if is_first and prefix:
+                chunk_text = f"{prefix}{chunk_text}"
+            chunks.append(chunk_text)
+            break
+        candidate = remaining[:limit]
+        split_at = max((candidate.rfind(p) for p in "。！？\n"), default=-1)
+        if split_at <= 0:
+            split_at = limit
+        chunk_body = candidate[: split_at + 1].strip()
+        remaining = remaining[split_at + 1 :].lstrip()
+        if is_first and prefix:
+            chunk_body = f"{prefix}{chunk_body}"
+        chunks.append(chunk_body)
+        is_first = False
+    return chunks
 
 
 def write_subtitles(
@@ -51,6 +98,7 @@ def write_subtitles(
     base_stem: str,
     mode: SubtitleMode,
     characters: Dict[str, CharacterMeta],
+    max_chars_per_line: int | None = None,
 ) -> list[pathlib.Path]:
     """StylizedSegment から字幕ファイルを生成する。"""
     out_dir.mkdir(exist_ok=True)
@@ -59,11 +107,15 @@ def write_subtitles(
     if mode == "off":
         return subtitle_paths
 
-    sorted_segments = sorted(segments, key=lambda s: (s.start, s.end))
+    include_label = mode == "all"
+    sorted_segments = sorted(
+        _explode_segments(segments, characters, include_label=include_label, max_chars=max_chars_per_line),
+        key=lambda s: (s.start, s.end),
+    )
 
     if mode == "all":
         path = out_dir / f"{base_stem}_report.srt"
-        _write_srt(sorted_segments, path, characters, include_label=True)
+        _write_srt(sorted_segments, path)
         subtitle_paths.append(path)
         return subtitle_paths
 
@@ -75,7 +127,60 @@ def write_subtitles(
     for character_id, char_segments in segments_by_character.items():
         suffix = character_id or "speaker"
         path = out_dir / f"{base_stem}_report_{suffix}.srt"
-        _write_srt(char_segments, path, characters, include_label=False)
+        _write_srt(char_segments, path)
         subtitle_paths.append(path)
 
     return subtitle_paths
+
+
+def _explode_segments(
+    segments: Sequence[StylizedSegment],
+    characters: Dict[str, CharacterMeta],
+    *,
+    include_label: bool,
+    max_chars: int | None,
+) -> list[StylizedSegment]:
+    if not max_chars or max_chars <= 0:
+        return [
+            StylizedSegment(
+                start=seg.start,
+                end=seg.end,
+                text=_build_line_text(seg, characters, include_label=include_label),
+                speaker=seg.speaker,
+                character=seg.character,
+            )
+            for seg in segments
+        ]
+
+    exploded: list[StylizedSegment] = []
+    for segment in segments:
+        display_text = _build_line_text(segment, characters, include_label=include_label)
+        chunks = _split_text(display_text, include_label=include_label, max_chars=max_chars)
+        if len(chunks) == 1:
+            exploded.append(
+                StylizedSegment(
+                    start=segment.start,
+                    end=segment.end,
+                    text=chunks[0],
+                    speaker=segment.speaker,
+                    character=segment.character,
+                )
+            )
+            continue
+        duration = max(0.0, segment.end - segment.start)
+        piece = duration / len(chunks) if duration else 0.0
+        for idx, chunk in enumerate(chunks):
+            start = segment.start + piece * idx
+            end = segment.start + piece * (idx + 1) if duration else segment.end
+            if idx == len(chunks) - 1:
+                end = segment.end
+            exploded.append(
+                StylizedSegment(
+                    start=start,
+                    end=end,
+                    text=chunk,
+                    speaker=segment.speaker,
+                    character=segment.character,
+                )
+            )
+    return exploded

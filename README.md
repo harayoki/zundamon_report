@@ -76,6 +76,7 @@ python -m reportvox input.mp4 --speakers auto --mp3
 - --resume <run_id>: 中断した工程から再開。
 - --hf-token: Hugging Face Token。
 - --subtitles {off,all,split}: SRT 字幕の出力モード。off で出力なし、all ですべての発話をまとめた 1 ファイル、split で話者ごとに別ファイル。
+- --subtitle-max-chars: 字幕1枚あたりの最大文字数（デフォルト 25、0 で無制限）。
 
 ## カスタム話者・口癖の追加
 新しいキャラクターの追加や口癖の調整方法は「[キャラクター追加・口癖設定ガイド](docs/characters.md)」にまとめています。

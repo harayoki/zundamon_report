@@ -19,6 +19,16 @@ def _positive_float(value: str) -> float:
     return number
 
 
+def _positive_int(value: str) -> int:
+    try:
+        number = int(value)
+    except ValueError as exc:  # pragma: no cover - argparse handles messaging
+        raise argparse.ArgumentTypeError(f"整数を指定してください: {value}") from exc
+    if number < 0:
+        raise argparse.ArgumentTypeError(f"0 以上の整数を指定してください: {value}")
+    return number
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="reportvox",
@@ -69,6 +79,12 @@ def build_parser() -> argparse.ArgumentParser:
         default="off",
         help="字幕データの出力モード: off で生成なし / all ですべての発話を1ファイルに / split で話者ごとに別ファイルへ保存。",
     )
+    parser.add_argument(
+        "--subtitle-max-chars",
+        type=_positive_int,
+        default=25,
+        help="字幕1枚あたりの最大文字数。0 で制限なし。デフォルトは 25 で、細かく切り替わる字幕を生成します。",
+    )
     return parser
 
 
@@ -98,6 +114,7 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
         speed_scale=args.speed_scale,
         resume_run_id=args.resume_run_id,
         subtitle_mode=args.subtitles,
+        subtitle_max_chars=args.subtitle_max_chars,
     )
 
 
