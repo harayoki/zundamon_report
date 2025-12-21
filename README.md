@@ -1,163 +1,78 @@
 # ReportVox
 
-ReportVox は、音声ファイルを「文字起こし → 話者分離 → 口調変換 → VOICEVOX での音声生成 → WAV/MP3 出力」まで自動化する CLI ツールです。NotebookLM などが生成する m4a を扱うため ffmpeg は必須で、`ffmpeg -version` が通る状態にしてください。動画ファイル（mp4 など）の入力も許可していますが、音声トラックがあることが前提で、最初に ffmpeg で WAV に正規化してから処理します。
+ReportVox は、音声ファイルを「文字起こし → 話者分離 → 口調変換 → VOICEVOX での音声生成 → WAV/MP3 出力」まで自動化する CLI ツールです。 NotebookLM などが生成する m4a を扱うため ffmpeg は必須です。
 
-## ワークフロー
-1. 入力音声を `work/<run_id>/` にコピー（run_id は重複しないよう自動採番）
-2. ffmpeg で WAV に正規化（以降は WAV のみ使用）
-3. Whisper で文字起こし（セグメント JSON を保存）
-4. pyannote.audio で話者分離（`--speakers` が `auto/2` のときに実行）
-5. Whisper セグメントと突合して話者ラベルを付与
-6. 1 人相当なら speaker1 のキャラクターで全編、2 人なら発話量が多い話者を speaker1 としてキャラ割当
-7. （オプション）口調変換、定型句の自動挿入
-8. VOICEVOX Engine HTTP API で行ごとに合成
-9. wav を結合して `out/<stem>_report.wav` を生成
-10. `--mp3` 指定時に MP3 を追加生成（ffmpeg 使用）
+## ⚠️ 依存関係に関する重要な注意事項
+現在、Windows 環境において pyannote.audio と PyTorch 周辺ライブラリの間に深刻な互換性問題が複数確認されています。 本ツールではこれらを回避するためのパッチを内蔵していますが、以下の環境構築が必須となります。
+
+### 1. NumPy のバージョン固定
+NumPy 2.0 以降では話者分離がクラッシュするため、1.26.x 系を強制してください。
+```bash
+pip install "numpy<2"
+```
+
+### 2. FFmpeg Shared 版の導入 (Windows 必須)
+話者分離（torchcodec）の動作には、Shared 版（共有DLL版）の FFmpeg が必須です。
+- 取得元: gyan.dev から "release full shared" を選択。
+- 設定: 解凍した bin フォルダのパスを環境変数 FFMPEG_SHARED_PATH に設定してください。
+  ```bash
+  # 例 (Git Bash)
+  export FFMPEG_SHARED_PATH="F:/Program Files/ffmpeg-7.1.1-full_build-shared/bin"
+  ```
+  ※本ツールは起動時にこの環境変数を参照し、自動的に DLL 探索パスへ追加します。
+
+### 3. PyTorch 2.6+ セキュリティ制限の回避
+最新の PyTorch では weights_only=True がデフォルトとなり、モデル読み込みで UnpicklingError が発生します。 本ツールは起動時に torch.load をパッチし、この制限を自動で回避します。
 
 ## インストール
-Python 3.11+ を想定しています。
-
+Python 3.11+ を推奨します。
 ```bash
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install --upgrade pip
 pip install -r requirements.txt
+pip install "numpy<2"
 ```
 
-### ffmpeg 導入例
-- Windows: https://www.gyan.dev/ffmpeg/builds/ から取得し、`ffmpeg/bin` を PATH に追加
-  - pyannote.audio + TorchCodec を Windows で使う場合は「shared」と書かれた共有DLL版を選択してください。`bin` フォルダーを PATH か DLL 検索パスに入れないと libtorchcodec_core*.dll が見つからないエラーになります。
-- macOS: `brew install ffmpeg`
-- Linux (Debian/Ubuntu): `sudo apt-get install ffmpeg`
-- インストール後、`ffmpeg -version` が成功することを確認してください。
-
 ## 依存サービス
-- VOICEVOX Engine（ローカル起動を想定）
-  - アプリ版ではなくエンジンを事前にダウンロードし、ポートを指定して起動しておいてください。
-  - 例: `VOICEVOX_ENGINE_HOME=/path/to/engine ./run --host 127.0.0.1 --port 50021`
+### pyannote.audio の認証
+話者分離機能（--speakers auto/2）を利用するには、Hugging Face の Classic Token (Read) が必要です。
 
-### pyannote.audio の実行には Hugging Face Token が必要です
-話者分離機能（`--speakers auto/2`）を利用する場合、Hugging Face の **Classic Token (Read)** が必要です。
+1. 以下のリポジトリですべて利用規約に同意（Accept）してください：
+   - pyannote/speaker-diarization-3.1
+   - pyannote/segmentation-3.0
+2. Hugging Face Settings でトークンを作成。
+3. トークンを環境変数 PYANNOTE_TOKEN または --hf-token で渡してください。
 
-1. **以下の 4 つのリポジトリすべて**で利用規約に同意（Accept）してください：
-   - [pyannote/speaker-diarization-3.1](https://huggingface.co/pyannote/speaker-diarization-3.1) (推奨・メイン)
-   - [pyannote/segmentation-3.0](https://huggingface.co/pyannote/segmentation-3.0) (分析モデル)
-   - [pyannote/segmentation](https://huggingface.co/pyannote/segmentation) (基盤モデル)
-   - [pyannote/speaker-diarization-community-1](https://huggingface.co/pyannote/speaker-diarization-community-1) (コミュニティデータ)
-2. [Hugging Face Settings](https://huggingface.co/settings/tokens) で **New token** を作成します。
-   - **重要：** Token type は **Classic**、権限は **Read** を選択してください。
-   - ※Fine-grained token を使用すると、新しいモデルが追加されるたびに手動で権限を追加する必要があるため推奨しません。
-3. 作成したトークンを環境変数 `PYANNOTE_TOKEN` または `--hf-token` で渡してください。
-
-### FFmpeg の導入 (Windows の場合)
-pyannote.audio (TorchCodec) が動作するために、**Shared 版** の FFmpeg が必須です。
-- [gyan.dev](https://www.gyan.dev/ffmpeg/builds/) から、名前に **"shared"** と入っている zip/7z を選んでください（例: `ffmpeg-release-full-shared.7z`）。
-- 解凍した `bin` フォルダを環境変数 PATH に追加してください。
-- `essentials_build` や `full_build` では DLL が不足しており動作しません。
-
-### FFmpeg Shared版の探し方（Gyan.dev）
-1. https://www.gyan.dev/ffmpeg/builds/ を開く
-2. 真ん中あたりの "release builds" セクションを見る
-3. **"release full shared"** というリンク（.7z）をクリックする
-   - ※ "essentials" や "full" (sharedなし) は DLL が足りないため不可
-
-## 使い方
+## 使い方 (コマンド例)
 ```bash
 # 自動話者判定、デフォルト（ずんだもん+めたん）
 python -m reportvox input.wav
 
-# ずんだもんの自己紹介（憧れ/現在の役割を指定）
+# ずんだもんの自己紹介（役割を指定）
 python -m reportvox input.m4a --zunda-senior-job エンジニア --zunda-junior-job 自動化係
-
-# 話者を強制 1 人（ずんだもんのみ）
-python -m reportvox input.wav --speakers 1
 
 # 話者 2 人を強制し、キャラ指定
 python -m reportvox input.wav --speakers 2 --speaker1 zundamon --speaker2 metan
 
-# MP3 も生成
-python -m reportvox input.wav --mp3 --bitrate 192k
-
 # 中断したワークフローを再開（work/<run_id> を指定）
 python -m reportvox input.wav --resume 20240101-120000
 
-# 動画ファイル（音声トラックあり）も入力可
+# 動画ファイルも入力可、MP3も生成
 python -m reportvox input.mp4 --speakers auto --mp3
-
-# VOICEVOX の URL を指定
-python -m reportvox input.wav --voicevox-url http://127.0.0.1:50021
 ```
 
-### 主なオプション
-- `--speakers {auto,1,2}`: 話者数の扱い。`auto` では pyannote.audio で 1/2 人を判定し、全発話の 93% 以上を占める話者がいれば単一話者として処理します。
-- `--speaker1 / --speaker2`: キャラクター ID。デフォルトは `zundamon` と `metan`。発話量が多い話者が `speaker1` に割り当てられます。
-- `--model`: Whisper のモデルサイズ（例: `base`, `small`, `medium`, `large`）。
-- `--voicevox-url`: VOICEVOX Engine のベース URL。
-- `--llm`: 口調変換バックエンドの選択。`none`（変換なし）、`openai`、`local` から指定できます（デフォルトは `none`）。
-- `--mp3 / --bitrate`: MP3 も生成する場合のフラグとビットレート。
-- `--ffmpeg-path`: ffmpeg 実行ファイルへのパス（デフォルトは `ffmpeg`。環境変数の PATH に無い場合に指定）。
-- `--keep-work`: ワークディレクトリ `work/<run_id>/` を削除せずに残します。
-- `--resume <run_id>`: 中断/完了済みのワークディレクトリを再利用して処理を再開します。`input.*` や `transcript.json`、`diarization.json`、`stylized.json` が既存の場合は再利用し、欠けている工程のみ実行します。
-- `--hf-token`: pyannote.audio 用の Hugging Face Token を明示指定（環境変数 `PYANNOTE_TOKEN` でも可）。
-- `--zunda-senior-job` / `--zunda-junior-job`: ずんだもんの自己紹介（憧れの職業/現在の役割）を挿入します。
+## 主なオプション
+- --speakers {auto,1,2}: 話者数の扱い。
+- --model: Whisper のモデルサイズ。
+- --voicevox-url: VOICEVOX Engine のベース URL。
+- --resume <run_id>: 中断した工程から再開。
+- --hf-token: Hugging Face Token。
 
-## characters の追加方法
-`characters/<id>/` ディレクトリを作り、`meta.yaml` と `examples.json` を配置します。`meta.yaml` では VOICEVOX の `speaker_id` を設定し、口調情報や定型句を登録してください。`examples.json` には短文例を配列で追加します。
+## トラブルシューティング（パッチ対応済み事項）
+以下の問題は diarize.py 内のモンキーパッチにより自動修正されます：
 
-## 出力
-- 常に: `out/<入力ファイル名>_report.wav`
-- `--mp3` 指定時: `out/<入力ファイル名>_report.mp3`
-
-各ステップの中間生成物は `work/<run_id>/` に保存されます。`seg_*.wav` には VOICEVOX で生成した発話ごとの音声、`stylized.json` にはキャラクターや挿入フレーズを反映したセグメントが含まれます。
-
-## 中断からの再開
-`work/<run_id>/` に残っている中間生成物を利用して、途中から処理を続行できます。
-
-- `--resume <run_id>` を指定すると、既存の `transcript.json`/`diarization.json`/`stylized.json`/`seg_*.wav` を再利用し、足りない工程だけ再実行します。
-- 失敗時や `--keep-work` を付けて終了した場合、`work/` に残った run_id を指定してください。
-- run_id は実行開始時に `[reportvox] run id: <run_id>` という形で表示されます。
-
-## 注意事項
-- VOICEVOX が起動していない場合、合成でエラーとなります。
-- ffmpeg が無い場合は実行開始時にエラーとなります。
-- LLM 口調変換は差し替えやすい構造ですが、デフォルトではスキップされます。
-
-### pyannote/speaker-diarization への認証だけを確認したい場合
-pyannote.audio の認証がうまくいかない場合、次のスクリプトで Token 設定だけを検証できます。
-
-```bash
-python -m reportvox.pyannote_auth --hf-token hf_xxx  # 環境変数 PYANNOTE_TOKEN でも可
-```
-
-環境変数 `PYANNOTE_TOKEN` を見た上で `pyannote/speaker-diarization` のダウンロード認証を試し、成功可否と環境情報を表示します。
-
-## トラブルシューティング
-### pyannote.audio の話者分離で `torchcodec` が DLL を見つけられない/TypeError が出る
-```
-[reportvox +00:00] diarizing speakers (auto)...
-torchcodec is not installed correctly so built-in audio decoding will fail. Solutions are:
-...
-TypeError: Pipeline.from_pretrained() got an unexpected keyword argument 'use_auth_token'
-```
-
-上記のようなログが出て話者分離に失敗する場合は、以下を順に確認してください（特に Windows 環境で libtorchcodec_core*.dll が見つからない場合の定番対処です）。
-
-1. **pyannote.audio を 3 系以降に更新する。** 3 系では `use_auth_token` が廃止されていますが、アプリ側で自動的に対応します。古い 2 系を使っている場合はアップグレードしてください。
-   ```bash
-   pip install -U "pyannote.audio>=3.0"
-   ```
-2. **PyTorch と torchcodec の互換バージョンを使う。** PyTorch 2.8.0 を利用する場合は torchcodec 0.6/0.7 系が必要です。例:
-   ```bash
-   pip uninstall -y torchcodec
-   pip install "torchcodec==0.7.*"
-   ```
-   互換表: https://github.com/pytorch/torchcodec?tab=readme-ov-file#installing-torchcodec
-3. **FFmpeg は共有DLL版（shared build）を導入する。** Gyan のビルドなら「shared」と書かれたものを選び、`bin` フォルダーを PATH か DLL 検索パスに追加してください。PATH だけで足りない場合は、Python 実行前に次のように DLL 探索パスへ追加します（例は PowerShell で実行するスクリプトに追記する形）:
-   ```python
-   import os
-   os.add_dll_directory(r"F:\Program Files\ffmpeg-shared\bin")
-   ```
-4. **依存DLLの不足を確認する。** VC++ 再頒布可能パッケージなどが欠けていると libtorchcodec_core*.dll のロードに失敗します。Dependencies で DLL を開くと不足 DLL が一覧されます。
-5. **緊急回避として TorchCodec を使わない経路を試す。** `soundfile` / `librosa` で WAV を読み込み、`{"waveform": tensor, "sample_rate": int}` を `Pipeline.from_pretrained()` に渡せば TorchCodec を経由せずに実行できます。
-
-上記を順に試しても解消しない場合は、暫定措置として `--speakers 1` で話者分離をスキップできます。
+- TypeError (use_auth_token): huggingface_hub の引数名変更エラーを修正。
+- WeightsUnpickler error: PyTorch 2.6+ のセキュリティ制限を自動解除。
+- AttributeError (with_character): AlignedSegment クラスのメソッド不足を解消。
+- FFmpeg DLL Path: 環境変数 FFMPEG_SHARED_PATH からの動的ロードに対応。
