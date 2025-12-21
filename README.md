@@ -72,6 +72,9 @@ python -m reportvox input.mp4 --speakers auto --mp3
 - --resume <run_id>: 中断した工程から再開。
 - --hf-token: Hugging Face Token。
 
+## カスタム話者・口癖の追加
+新しいキャラクターの追加や口癖の調整方法は「[キャラクター追加・口癖設定ガイド](docs/characters.md)」にまとめています。
+
 ## トラブルシューティング（パッチ対応済み事項）
 以下の問題は diarize.py 内のモンキーパッチにより自動修正されます：
 
