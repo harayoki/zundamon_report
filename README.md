@@ -77,6 +77,7 @@ python -m reportvox input.wav --voicevox-url http://127.0.0.1:50021
 - `--voicevox-url`: VOICEVOX Engine のベース URL。
 - `--llm`: 口調変換バックエンドの選択。`none`（変換なし）、`openai`、`local` から指定できます（デフォルトは `none`）。
 - `--mp3 / --bitrate`: MP3 も生成する場合のフラグとビットレート。
+- `--ffmpeg-path`: ffmpeg 実行ファイルへのパス（デフォルトは `ffmpeg`。環境変数の PATH に無い場合に指定）。
 - `--keep-work`: ワークディレクトリ `work/<run_id>/` を削除せずに残します。
 - `--resume <run_id>`: 中断/完了済みのワークディレクトリを再利用して処理を再開します。`input.*` や `transcript.json`、`diarization.json`、`stylized.json` が既存の場合は再利用し、欠けている工程のみ実行します。
 - `--hf-token`: pyannote.audio 用の Hugging Face Token を明示指定（環境変数 `PYANNOTE_TOKEN` でも可）。
