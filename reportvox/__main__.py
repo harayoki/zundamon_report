@@ -1,4 +1,4 @@
-"""Module entrypoint for `python -m reportvox`."""
+"""`python -m reportvox` で実行する際のエントリポイント。"""
 
 from .cli import main
 

@@ -1,4 +1,4 @@
-"""Style conversion and phrase insertion."""
+"""口調変換と定型句挿入のロジック。"""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ class StylizedSegment:
 def _insert_phrase(text: str, phrases: list[str]) -> str:
     if not phrases or len(text) < 8:
         return text
-    # avoid multiple insertions; place at start or end randomly
+    # 複数回の挿入を避け、先頭か末尾にランダムで挿入する
     phrase = random.choice(phrases)
     if random.random() < 0.5:
         return f"{phrase}。{text}"
@@ -37,7 +37,7 @@ def _heuristic_phrase(segment: AlignedSegment, meta: CharacterMeta, inserted: se
         return text
     if len(text) < 12:
         return text
-    # simple heuristics: intro
+    # 簡易ヒューリスティック（自己紹介など）
     text = _insert_phrase(text, meta.phrases.get("idea_intro", []))
     inserted.add(segment.character or "")
     return text
@@ -46,8 +46,8 @@ def _heuristic_phrase(segment: AlignedSegment, meta: CharacterMeta, inserted: se
 def _llm_transform(text: str, meta: CharacterMeta, backend: LLMBackend) -> str:
     if backend == "none":
         return text
-    # Placeholder for pluggable backends
-    # For now, simply return text unchanged to avoid external dependencies.
+    # 切り替え可能なバックエンドの差し込みポイント
+    # いまは外部依存を増やさないため何も変換せず返す。
     return text
 
 

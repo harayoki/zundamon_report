@@ -26,6 +26,7 @@ pip install -r requirements.txt
 
 ### ffmpeg 導入例
 - Windows: https://www.gyan.dev/ffmpeg/builds/ から取得し、`ffmpeg/bin` を PATH に追加
+  - pyannote.audio + TorchCodec を Windows で使う場合は「shared」と書かれた共有DLL版を選択してください。`bin` フォルダーを PATH か DLL 検索パスに入れないと libtorchcodec_core*.dll が見つからないエラーになります。
 - macOS: `brew install ffmpeg`
 - Linux (Debian/Ubuntu): `sudo apt-get install ffmpeg`
 - インストール後、`ffmpeg -version` が成功することを確認してください。
@@ -109,7 +110,7 @@ python -m reportvox input.wav --voicevox-url http://127.0.0.1:50021
 - LLM 口調変換は差し替えやすい構造ですが、デフォルトではスキップされます。
 
 ## トラブルシューティング
-### pyannote.audio の話者分離で `torchcodec` に関する警告と `Pipeline.from_pretrained()` の TypeError が出る
+### pyannote.audio の話者分離で `torchcodec` が DLL を見つけられない/TypeError が出る
 ```
 [reportvox +00:00] diarizing speakers (auto)...
 torchcodec is not installed correctly so built-in audio decoding will fail. Solutions are:
@@ -117,17 +118,24 @@ torchcodec is not installed correctly so built-in audio decoding will fail. Solu
 TypeError: Pipeline.from_pretrained() got an unexpected keyword argument 'use_auth_token'
 ```
 
-上記のようなログが出て話者分離に失敗する場合は、以下を順に確認してください。
+上記のようなログが出て話者分離に失敗する場合は、以下を順に確認してください（特に Windows 環境で libtorchcodec_core*.dll が見つからない場合の定番対処です）。
 
 1. **pyannote.audio を 3 系以降に更新する。** 3 系では `use_auth_token` が廃止されていますが、アプリ側で自動的に対応します。古い 2 系を使っている場合はアップグレードしてください。
    ```bash
    pip install -U "pyannote.audio>=3.0"
    ```
-2. **torchcodec と PyTorch の組み合わせを見直す。** エラーメッセージに「PyTorch 2.8.0+cpu は対応外」といった文言が出る場合は、互換表（https://github.com/pytorch/torchcodec?tab=readme-ov-file#installing-torchcodec）を参照して対応するバージョンを入れ直してください。例:
+2. **PyTorch と torchcodec の互換バージョンを使う。** PyTorch 2.8.0 を利用する場合は torchcodec 0.6/0.7 系が必要です。例:
    ```bash
-   # CPU 環境の例
-   pip install --force-reinstall "torch==2.2.*+cpu" "torchcodec==0.2.*+cpu" -f https://download.pytorch.org/whl/torch_stable.html
+   pip uninstall -y torchcodec
+   pip install "torchcodec==0.7.*"
    ```
-3. **ffmpeg が正しくインストールされているか確認する。** `ffmpeg -version` が失敗する場合は、上記「ffmpeg 導入例」を参考に導入してください。
+   互換表: https://github.com/pytorch/torchcodec?tab=readme-ov-file#installing-torchcodec
+3. **FFmpeg は共有DLL版（shared build）を導入する。** Gyan のビルドなら「shared」と書かれたものを選び、`bin` フォルダーを PATH か DLL 検索パスに追加してください。PATH だけで足りない場合は、Python 実行前に次のように DLL 探索パスへ追加します（例は PowerShell で実行するスクリプトに追記する形）:
+   ```python
+   import os
+   os.add_dll_directory(r"F:\Program Files\ffmpeg-shared\bin")
+   ```
+4. **依存DLLの不足を確認する。** VC++ 再頒布可能パッケージなどが欠けていると libtorchcodec_core*.dll のロードに失敗します。Dependencies で DLL を開くと不足 DLL が一覧されます。
+5. **緊急回避として TorchCodec を使わない経路を試す。** `soundfile` / `librosa` で WAV を読み込み、`{"waveform": tensor, "sample_rate": int}` を `Pipeline.from_pretrained()` に渡せば TorchCodec を経由せずに実行できます。
 
 上記を順に試しても解消しない場合は、暫定措置として `--speakers 1` で話者分離をスキップできます。

@@ -1,4 +1,4 @@
-"""VoiceVox synthesis client."""
+"""VOICEVOX で音声合成するためのクライアント。"""
 
 from __future__ import annotations
 
@@ -15,13 +15,13 @@ from .style_convert import StylizedSegment
 
 
 class VoiceVoxError(RuntimeError):
-    """Raised when VoiceVox API calls fail."""
+    """VOICEVOX API 呼び出しに失敗した際の例外。"""
 
 
 def _request_audio_query(text: str, speaker_id: int, base_url: str, env_info: EnvironmentInfo | None) -> dict:
     resp = requests.post(f"{base_url}/audio_query", params={"text": text, "speaker": speaker_id})
     if resp.status_code != 200:
-        raise VoiceVoxError(append_env_details(f"VoiceVox audio_query failed: {resp.status_code} {resp.text}", env_info))
+        raise VoiceVoxError(append_env_details(f"VOICEVOX audio_query に失敗しました: {resp.status_code} {resp.text}", env_info))
     return resp.json()
 
 
@@ -29,7 +29,7 @@ def _request_synthesis(query: dict, speaker_id: int, base_url: str, env_info: En
     headers = {"Content-Type": "application/json"}
     resp = requests.post(f"{base_url}/synthesis", params={"speaker": speaker_id}, data=json.dumps(query), headers=headers)
     if resp.status_code != 200:
-        raise VoiceVoxError(append_env_details(f"VoiceVox synthesis failed: {resp.status_code} {resp.text}", env_info))
+        raise VoiceVoxError(append_env_details(f"VOICEVOX synthesis に失敗しました: {resp.status_code} {resp.text}", env_info))
     return resp.content
 
 
@@ -47,10 +47,10 @@ def synthesize_segments(
     for idx, seg in enumerate(segments):
         meta = characters.get(seg.character)
         if meta is None:
-            raise VoiceVoxError(append_env_details(f"Character metadata missing for {seg.character}.", env_info))
+            raise VoiceVoxError(append_env_details(f"{seg.character} のキャラクターメタ情報が見つかりません。", env_info))
         if meta.voicevox_speaker_id is None:
             raise VoiceVoxError(
-                append_env_details(f"VoiceVox speaker id is missing for character {meta.id}.", env_info)
+                append_env_details(f"キャラクター {meta.id} に VOICEVOX の speaker_id が設定されていません。", env_info)
             )
         out_path = run_dir / f"seg_{idx:04d}.wav"
         if skip_existing and out_path.exists():

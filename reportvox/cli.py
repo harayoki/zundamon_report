@@ -1,4 +1,4 @@
-"""Command line interface for ReportVox."""
+"""ReportVox のコマンドラインインターフェース。"""
 
 from __future__ import annotations
 
@@ -12,45 +12,45 @@ from .pipeline import PipelineConfig, run_pipeline
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="reportvox",
-        description="Audio to diarized, character-styled VoiceVox report generator.",
+        description="音声を話者分離・キャラクター口調で整形し、VOICEVOX で読み上げるレポート生成ツール。",
     )
     parser.add_argument(
         "input",
         nargs="?",
-        help="Input audio/video file path (audio track required). Required unless --resume is used.",
+        help="入力となる音声/動画ファイルのパス（音声トラック必須）。--resume 指定がない場合は必須。",
     )
-    parser.add_argument("--voicevox-url", default="http://127.0.0.1:50021", help="VoiceVox Engine base URL.")
+    parser.add_argument("--voicevox-url", default="http://127.0.0.1:50021", help="VOICEVOX Engine のベースURL。")
     parser.add_argument(
         "--speakers",
         choices=["auto", "1", "2"],
         default="auto",
-        help="Number of speakers: auto detection, force 1, or force 2.",
+        help="話者数の扱い: 自動判定/1人固定/2人固定。",
     )
-    parser.add_argument("--speaker1", default="zundamon", help="Character id for primary speaker.")
-    parser.add_argument("--speaker2", default="metan", help="Character id for secondary speaker.")
+    parser.add_argument("--speaker1", default="zundamon", help="主話者に割り当てるキャラクターID。")
+    parser.add_argument("--speaker2", default="metan", help="副話者に割り当てるキャラクターID。")
     parser.add_argument("--zunda-senior-job", dest="zunda_senior_job", default=None, help="ずんだもんが憧れる職業を指定。")
     parser.add_argument("--zunda-junior-job", dest="zunda_junior_job", default=None, help="ずんだもんの現在の役割を指定。")
-    parser.add_argument("--mp3", action="store_true", help="Generate mp3 if ffmpeg is available.")
-    parser.add_argument("--bitrate", default="192k", help="Bitrate for mp3 output.")
-    parser.add_argument("--ffmpeg-path", default="ffmpeg", help="Path to ffmpeg executable.")
-    parser.add_argument("--keep-work", action="store_true", help="Keep intermediate files under work/.")
-    parser.add_argument("--model", default="small", help="Whisper model size to use.")
+    parser.add_argument("--mp3", action="store_true", help="ffmpeg が利用可能な場合に mp3 も生成。")
+    parser.add_argument("--bitrate", default="192k", help="mp3 出力時のビットレート。")
+    parser.add_argument("--ffmpeg-path", default="ffmpeg", help="ffmpeg 実行ファイルへのパス。")
+    parser.add_argument("--keep-work", action="store_true", help="work/ 以下の中間ファイルを削除せず残す。")
+    parser.add_argument("--model", default="small", help="利用する Whisper モデルサイズ。")
     parser.add_argument(
         "--resume",
         dest="resume_run_id",
         default=None,
-        help="Resume processing from an existing work/<run_id> directory.",
+        help="既存の work/<run_id> ディレクトリから処理を再開する。",
     )
     parser.add_argument(
         "--llm",
         choices=["none", "openai", "local"],
         default="none",
-        help="LLM backend for style conversion.",
+        help="口調変換に使う LLM バックエンド。",
     )
     parser.add_argument(
         "--hf-token",
         default=None,
-        help="Hugging Face token for pyannote.audio if required (env PYANNOTE_TOKEN is also read).",
+        help="pyannote.audio 用の Hugging Face Token（環境変数 PYANNOTE_TOKEN も参照）。",
     )
     return parser
 
@@ -60,7 +60,7 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
     args = parser.parse_args(argv)
 
     if args.input is None and args.resume_run_id is None:
-        parser.error("input file is required unless --resume is provided")
+        parser.error("--resume を指定しない場合は入力ファイルが必要です。")
 
     input_path = pathlib.Path(args.input).expanduser().resolve() if args.input else None
     return PipelineConfig(
