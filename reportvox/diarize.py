@@ -78,8 +78,9 @@ def diarize_audio(
         pipeline = PyannotePipeline.from_pretrained("pyannote/speaker-diarization", **pipeline_kwargs)
     except Exception as exc:  # pragma: no cover - network/auth errors
         raise RuntimeError(
-            "Failed to load pyannote/speaker-diarization. Ensure your Hugging Face token has access to the model "
-            "(https://huggingface.co/pyannote/speaker-diarization) and is passed via --hf-token or PYANNOTE_TOKEN.\n"
+            "Failed to authenticate to pyannote/speaker-diarization even though a Hugging Face token was provided.\n"
+            "Please confirm that the account associated with the token has accepted the model terms and that the token "
+            "retains access permissions.\n"
             f"{_PYANNOTE_ACCESS_GUIDE}"
         ) from exc
     diarization = pipeline(

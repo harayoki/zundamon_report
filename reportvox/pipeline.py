@@ -206,26 +206,21 @@ def run_pipeline(config: PipelineConfig) -> None:
     hf_token = config.hf_token or os.environ.get("PYANNOTE_TOKEN")
     diarization_path = run_dir / "diarization.json"
     need_new_diarization = config.speakers != "1" and not (resume and diarization_path.exists())
-    allow_partial = False
     if need_new_diarization and hf_token is None:
-        print("[reportvox] pyannote diarization requires a Hugging Face token (set PYANNOTE_TOKEN or --hf-token).")
-        print("[reportvox] Without the token, processing can only proceed until transcription and will then stop.")
-        reply = input("[reportvox] Continue with partial processing? [y/N]: ").strip().lower()
-        if reply not in ("y", "yes"):
-            print("[reportvox] Aborting. Please provide the Hugging Face token and re-run.")
-            return
-        allow_partial = True
+        raise RuntimeError(
+            "pyannote diarization requires a Hugging Face token, but neither --hf-token nor PYANNOTE_TOKEN was set.\n"
+            f"{diarize._PYANNOTE_ACCESS_GUIDE}"
+        )
 
     total_steps = 4  # ffmpeg, copy input, normalize, transcribe
-    if not allow_partial:
-        total_steps += 1  # diarization load/run
-        total_steps += 1  # style conversion
-        total_steps += 1  # voicevox synthesis
-        total_steps += 1  # join wav
-        if config.want_mp3:
-            total_steps += 1
-        if not config.keep_work:
-            total_steps += 1
+    total_steps += 1  # diarization load/run
+    total_steps += 1  # style conversion
+    total_steps += 1  # voicevox synthesis
+    total_steps += 1  # join wav
+    if config.want_mp3:
+        total_steps += 1
+    if not config.keep_work:
+        total_steps += 1
     steps_done = 0
 
     def _complete_step(message: str, start_time: float) -> None:
@@ -277,12 +272,6 @@ def run_pipeline(config: PipelineConfig) -> None:
         transcript_path.write_text(json.dumps(whisper_result.as_json(), ensure_ascii=False, indent=2), encoding="utf-8")
         reporter.log("transcription completed and saved.")
     _complete_step("transcription step finished.", step_start)
-
-    if allow_partial:
-        print("[reportvox] Hugging Face token was not provided; stopping after transcription as requested.")
-        print(f"[reportvox] transcript saved -> {transcript_path}")
-        print(f"[reportvox] Re-run with --resume {run_id} after setting PYANNOTE_TOKEN or --hf-token to continue.")
-        return
 
     step_start = reporter.now()
     if resume and diarization_path.exists():
