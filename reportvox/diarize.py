@@ -1,4 +1,4 @@
-"""Speaker diarization utilities."""
+"""話者分離に関するユーティリティ。"""
 
 from __future__ import annotations
 
@@ -12,11 +12,20 @@ from .envinfo import EnvironmentInfo, append_env_details
 
 
 _PYANNOTE_ACCESS_STEPS = """\
-To enable diarization, please:
-  1. Accept the user conditions at https://huggingface.co/pyannote/speaker-diarization and https://huggingface.co/pyannote/segmentation
-  2. Create an access token at https://huggingface.co/settings/tokens"""
+話者分離を有効化するには次を実施してください:
+  1. https://huggingface.co/pyannote/speaker-diarization と https://huggingface.co/pyannote/segmentation で利用規約に同意する
+  2. https://huggingface.co/settings/tokens でアクセストークンを発行する"""
 
-_PYANNOTE_TOKEN_USAGE = "Provide the Hugging Face token via --hf-token or the PYANNOTE_TOKEN environment variable."
+_PYANNOTE_TOKEN_USAGE = "発行した Hugging Face Token を --hf-token または環境変数 PYANNOTE_TOKEN で指定してください。"
+
+_TORCHCODEC_TROUBLESHOOT = """TorchCodec が FFmpeg の共有DLLを見つけられず失敗する場合の対処:
+- PyTorch 2.8.0 と組み合わせる場合は torchcodec 0.6/0.7 系が互換です。例: `pip uninstall -y torchcodec && pip install \"torchcodec==0.7.*\"`
+- Windows では FFmpeg の shared build（共有DLL同梱版）が必須です。Gyan の配布なら「shared」と書かれたものを選び、bin フォルダーを PATH か DLL 探索パスに含めてください。
+- Python 実行前に DLL 探索パスへ追加する必要がある場合の例:
+  import os
+  os.add_dll_directory(r\"F:\\\\Program Files\\\\ffmpeg-shared\\\\bin\")
+- VC++ 再頒布可能パッケージなど依存DLLが欠けていないか、Dependencies で libtorchcodec_core*.dll を開いて確認してください。
+- どうしても解消しない場合は、soundfile / librosa などで WAV を読み込み、`{\"waveform\": テンソル, \"sample_rate\": int}` を `Pipeline.from_pretrained` に渡す回避策もあります。"""
 
 SpeakerLabel = Literal["A", "B"]
 Mode = Literal["auto", "1", "2"]
@@ -65,14 +74,18 @@ def diarize_audio(
         from pyannote.audio import Pipeline as PyannotePipeline
     except Exception as exc:  # pragma: no cover - import guard
         raise RuntimeError(
-            append_env_details("pyannote.audio is required for diarization. Please install dependencies.", env_info)
+            append_env_details(
+                "pyannote.audio が必要です。TorchCodec が FFmpeg の DLL を見つけられない場合などは以下を確認してください。\n"
+                f"{_PYANNOTE_ACCESS_STEPS}\n{_PYANNOTE_TOKEN_USAGE}\n{_TORCHCODEC_TROUBLESHOOT}",
+                env_info,
+            )
         ) from exc
 
     token = hf_token
     if token is None:
         raise RuntimeError(
             append_env_details(
-                "Hugging Face token is required for pyannote diarization.\n"
+                "pyannote で話者分離するには Hugging Face Token が必要です。\n"
                 f"{_PYANNOTE_ACCESS_STEPS}\n{_PYANNOTE_TOKEN_USAGE}",
                 env_info,
             )
@@ -87,19 +100,27 @@ def diarize_audio(
     except Exception as exc:  # pragma: no cover - network/auth errors
         raise RuntimeError(
             append_env_details(
-                "Authentication to pyannote/speaker-diarization failed even though a Hugging Face token was provided.\n"
-                "Confirm that the account associated with the token has accepted the model terms and that the token retains "
-                "access permissions.\n"
-                f"{_PYANNOTE_ACCESS_STEPS}",
+                "Hugging Face Token は指定されていますが pyannote/speaker-diarization への認証に失敗しました。\n"
+                "Token を発行したアカウントで利用規約に同意しているか、権限が失効していないかを確認してください。\n"
+                f"{_PYANNOTE_ACCESS_STEPS}\n{_PYANNOTE_TOKEN_USAGE}",
                 env_info,
             )
         ) from exc
-    diarization = pipeline(
-        str(audio_path),
-        min_speakers=1 if mode == "auto" else None,
-        max_speakers=2 if mode == "auto" else None,
-        num_speakers=2 if mode == "2" else None,
-    )
+    try:
+        diarization = pipeline(
+            str(audio_path),
+            min_speakers=1 if mode == "auto" else None,
+            max_speakers=2 if mode == "auto" else None,
+            num_speakers=2 if mode == "2" else None,
+        )
+    except Exception as exc:
+        raise RuntimeError(
+            append_env_details(
+                "pyannote.audio の話者分離中にエラーが発生しました。TorchCodec が FFmpeg の共有DLLを見つけられない場合によく発生します。\n"
+                f"{_TORCHCODEC_TROUBLESHOOT}",
+                env_info,
+            )
+        ) from exc
 
     segments: list[DiarizedSegment] = []
     for turn, _, speaker in diarization.itertracks(yield_label=True):
@@ -134,7 +155,7 @@ def align_segments(
             )
         )
 
-    # simple smoothing: merge very short with previous speaker
+    # 簡易スムージング: きわめて短いセグメントは直前の話者に合わせる
     for idx in range(1, len(aligned)):
         prev = aligned[idx - 1]
         cur = aligned[idx]
@@ -156,11 +177,11 @@ def _overlap(a_start: float, a_end: float, b_start: float, b_end: float) -> floa
 
 
 def _configure_hf_auth(token: str) -> None:
-    """Make HF token visible to pyannote.audio (supports 2.x/3.x)."""
+    """pyannote.audio から Hugging Face Token が見えるように設定する（2.x/3.x 両対応）。"""
     try:
         from huggingface_hub import login  # type: ignore
     except Exception:
-        # Fall back to environment variables that huggingface_hub recognizes.
+        # huggingface_hub が認識する環境変数にフォールバック
         os.environ.setdefault("HF_TOKEN", token)
         os.environ.setdefault("HUGGINGFACEHUB_API_TOKEN", token)
         os.environ.setdefault("HUGGINGFACE_HUB_TOKEN", token)
@@ -170,7 +191,7 @@ def _configure_hf_auth(token: str) -> None:
 
 
 def _build_pyannote_kwargs(pyannote_pipeline_cls, token: str) -> dict:
-    """Return kwargs supported by the installed pyannote version."""
+    """インストール済みの pyannote バージョンで受け付けられる引数を判定する。"""
     signature = inspect.signature(pyannote_pipeline_cls.from_pretrained)
     params = signature.parameters
 

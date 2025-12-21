@@ -1,4 +1,4 @@
-"""Whisper transcription helpers."""
+"""Whisper で文字起こしを行うためのヘルパー。"""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ def transcribe_audio(audio_path, model_size: str = "small", *, env_info: Environ
     except Exception as exc:  # pragma: no cover - import guard
         raise RuntimeError(
             append_env_details(
-                "openai-whisper is required for transcription. Install with `pip install -r requirements.txt`.", env_info
+                "文字起こしには openai-whisper が必要です。`pip install -r requirements.txt` を実行してインストールしてください。", env_info
             )
         ) from exc
 

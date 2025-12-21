@@ -1,4 +1,4 @@
-"""Environment detection and reporting utilities."""
+"""環境情報の検出と表示用ユーティリティ。"""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ class FfmpegProbeResult:
 
 
 def probe_ffmpeg(ffmpeg_path: str) -> FfmpegProbeResult:
-    """Check whether ffmpeg is available and return its version line if possible."""
+    """ffmpeg の存在とバージョンを確認する。"""
     path_obj = pathlib.Path(ffmpeg_path)
     if path_obj.is_dir():
         exe_name = "ffmpeg.exe" if os.name == "nt" else "ffmpeg"
@@ -94,9 +94,9 @@ class EnvironmentInfo:
 
     def format(self) -> str:
         lines = []
-        ffmpeg_line = f"ffmpeg: {'found' if self.ffmpeg_available else 'not found'} (path: {self.ffmpeg_path})"
+        ffmpeg_line = f"ffmpeg: {'検出済み' if self.ffmpeg_available else '未検出'} (パス: {self.ffmpeg_path})"
         if self.ffmpeg_version:
-            ffmpeg_line += f" / version: {self.ffmpeg_version}"
+            ffmpeg_line += f" / バージョン: {self.ffmpeg_version}"
         lines.append(ffmpeg_line)
         if self.dependency_versions:
             for name, version in sorted(self.dependency_versions.items()):
@@ -105,11 +105,11 @@ class EnvironmentInfo:
             lines.append("依存モジュール: 検出なし")
 
         if self.hf_token_source == "cli":
-            token_line = "Hugging Face token source: CLI argument (--hf-token)"
+            token_line = "Hugging Face Token の指定元: CLI 引数 (--hf-token)"
         elif self.hf_token_source == "env":
-            token_line = "Hugging Face token source: environment variable (PYANNOTE_TOKEN)"
+            token_line = "Hugging Face Token の指定元: 環境変数 (PYANNOTE_TOKEN)"
         else:
-            token_line = "Hugging Face token source: not provided"
+            token_line = "Hugging Face Token の指定元: 未指定"
         lines.append(token_line)
         return "環境情報:\n  " + "\n  ".join(lines)
 

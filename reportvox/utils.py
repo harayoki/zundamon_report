@@ -1,4 +1,4 @@
-"""Utility helpers."""
+"""小さなユーティリティ関数群。"""
 
 from __future__ import annotations
 

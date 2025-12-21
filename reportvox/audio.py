@@ -1,4 +1,4 @@
-"""Audio utilities."""
+"""音声処理用のユーティリティ。"""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ def _parse_ffmpeg_major_version(version_line: str | None) -> int | None:
 
 
 def ensure_ffmpeg(ffmpeg_path: str = "ffmpeg", *, env_info: EnvironmentInfo | None = None) -> str:
-    """Ensure ffmpeg is available; return the executable path or raise RuntimeError if not."""
+    """ffmpeg の存在を確認し、実行可能パスを返す（見つからなければ RuntimeError を送出）。"""
     probe = probe_ffmpeg(ffmpeg_path)
     if env_info is not None:
         env_info.update_ffmpeg(probe)
@@ -60,7 +60,7 @@ def normalize_to_wav(
     ffmpeg_path: str = "ffmpeg",
     env_info: EnvironmentInfo | None = None,
 ) -> pathlib.Path:
-    """Convert input audio to wav using ffmpeg."""
+    """入力音声を ffmpeg で WAV に変換する。"""
     cmd = [ffmpeg_path, "-y", "-i", str(src), str(dest)]
     print("[reportvox] wav正規化開始")
     try:
@@ -80,7 +80,7 @@ def _read_params(path: pathlib.Path) -> tuple[int, int, int, int]:
 
 def join_wavs(inputs: Sequence[pathlib.Path], output: pathlib.Path, *, env_info: EnvironmentInfo | None = None) -> None:
     if not inputs:
-        raise ValueError(append_env_details("No input wavs to join.", env_info))
+        raise ValueError(append_env_details("結合対象の WAV がありません。", env_info))
 
     params = _read_params(inputs[0])
     nchannels, sampwidth, framerate, _ = params
@@ -92,7 +92,7 @@ def join_wavs(inputs: Sequence[pathlib.Path], output: pathlib.Path, *, env_info:
         for path in inputs:
             p = _read_params(path)
             if p[:3] != params[:3]:
-                raise ValueError(append_env_details("Input wav parameters do not match; cannot concatenate.", env_info))
+                raise ValueError(append_env_details("入力 WAV のパラメーターが一致しません。結合できません。", env_info))
             with wave.open(str(path), "rb") as in_wf:
                 out_wf.writeframes(in_wf.readframes(in_wf.getnframes()))
 

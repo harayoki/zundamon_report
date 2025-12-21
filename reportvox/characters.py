@@ -1,4 +1,4 @@
-"""Character metadata loading."""
+"""キャラクターメタデータを読み込むユーティリティ。"""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ def load_character(char_id: str) -> CharacterMeta:
     meta_path = base / "meta.yaml"
     examples_path = base / "examples.json"
     if not meta_path.exists():
-        raise FileNotFoundError(f"Character meta not found for id '{char_id}' at {meta_path}")
+        raise FileNotFoundError(f"キャラクターID '{char_id}' のメタ情報が {meta_path} に見つかりません。")
     meta = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
     examples = []
     if examples_path.exists():
