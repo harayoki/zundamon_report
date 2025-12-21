@@ -109,6 +109,15 @@ python -m reportvox input.wav --voicevox-url http://127.0.0.1:50021
 - ffmpeg が無い場合は実行開始時にエラーとなります。
 - LLM 口調変換は差し替えやすい構造ですが、デフォルトではスキップされます。
 
+### pyannote/speaker-diarization への認証だけを確認したい場合
+pyannote.audio の認証がうまくいかない場合、次のスクリプトで Token 設定だけを検証できます。
+
+```bash
+python -m reportvox.pyannote_auth --hf-token hf_xxx  # 環境変数 PYANNOTE_TOKEN でも可
+```
+
+環境変数 `PYANNOTE_TOKEN` を見た上で `pyannote/speaker-diarization` のダウンロード認証を試し、成功可否と環境情報を表示します。
+
 ## トラブルシューティング
 ### pyannote.audio の話者分離で `torchcodec` が DLL を見つけられない/TypeError が出る
 ```
