@@ -2,38 +2,39 @@
 
 from __future__ import annotations
 
+import os
 import pathlib
 import subprocess
 import wave
 from typing import Sequence
 
 
-def ensure_ffmpeg(ffmpeg_path: str = "ffmpeg") -> None:
-    """Ensure ffmpeg is available; raise RuntimeError if not."""
+def ensure_ffmpeg(ffmpeg_path: str = "ffmpeg") -> str:
+    """Ensure ffmpeg is available; return the executable path or raise RuntimeError if not."""
     ffmpeg_path_obj = pathlib.Path(ffmpeg_path)
-    if ffmpeg_path_obj.exists() and ffmpeg_path_obj.is_dir():
-        raise RuntimeError(
-            f"ffmpeg必須です。README参照。指定されたパスはディレクトリです (指定: {ffmpeg_path!r})。ffmpegの実行ファイルを指定してください。"
-        )
+    if ffmpeg_path_obj.is_dir():
+        exe_name = "ffmpeg.exe" if os.name == "nt" else "ffmpeg"
+        ffmpeg_path_obj = ffmpeg_path_obj / exe_name
     try:
         subprocess.run(
-            [ffmpeg_path, "-version"],
+            [str(ffmpeg_path_obj), "-version"],
             check=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
     except FileNotFoundError as exc:
         raise RuntimeError(
-            f"ffmpeg必須です。README参照。ffmpeg が見つかりません (指定: {ffmpeg_path!r})。"
+            f"ffmpeg必須です。README参照。ffmpeg が見つかりません (指定: {ffmpeg_path_obj!r})。"
         ) from exc
     except PermissionError as exc:
         raise RuntimeError(
-            f"ffmpeg必須です。README参照。指定されたパスに実行権限がないかアクセスが拒否されました (指定: {ffmpeg_path!r})。管理者権限やパスを確認してください。"
+            f"ffmpeg必須です。README参照。指定されたパスに実行権限がないかアクセスが拒否されました (指定: {ffmpeg_path_obj!r})。管理者権限やパスを確認してください。"
         ) from exc
     except subprocess.CalledProcessError as exc:
         raise RuntimeError(
-            f"ffmpeg必須です。README参照。ffmpeg の実行に失敗しました (指定: {ffmpeg_path!r})。"
+            f"ffmpeg必須です。README参照。ffmpeg の実行に失敗しました (指定: {ffmpeg_path_obj!r})。"
         ) from exc
+    return str(ffmpeg_path_obj)
 
 
 def normalize_to_wav(src: pathlib.Path, dest: pathlib.Path, *, ffmpeg_path: str = "ffmpeg") -> pathlib.Path:
