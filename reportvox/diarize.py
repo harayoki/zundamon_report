@@ -11,11 +11,12 @@ from typing import Iterable, List, Literal, Optional, Sequence
 from .envinfo import EnvironmentInfo, append_env_details
 
 
-_PYANNOTE_ACCESS_GUIDE = """\
+_PYANNOTE_ACCESS_STEPS = """\
 To enable diarization, please:
   1. Accept the user conditions at https://huggingface.co/pyannote/speaker-diarization and https://huggingface.co/pyannote/segmentation
-  2. Create an access token at https://huggingface.co/settings/tokens
-  3. Pass the token via --hf-token or the PYANNOTE_TOKEN environment variable"""
+  2. Create an access token at https://huggingface.co/settings/tokens"""
+
+_PYANNOTE_TOKEN_USAGE = "Provide the Hugging Face token via --hf-token or the PYANNOTE_TOKEN environment variable."
 
 SpeakerLabel = Literal["A", "B"]
 Mode = Literal["auto", "1", "2"]
@@ -71,8 +72,8 @@ def diarize_audio(
     if token is None:
         raise RuntimeError(
             append_env_details(
-                "Hugging Face token is required for pyannote diarization (set --hf-token or PYANNOTE_TOKEN).\n"
-                f"{_PYANNOTE_ACCESS_GUIDE}",
+                "Hugging Face token is required for pyannote diarization.\n"
+                f"{_PYANNOTE_ACCESS_STEPS}\n{_PYANNOTE_TOKEN_USAGE}",
                 env_info,
             )
         )
@@ -86,10 +87,10 @@ def diarize_audio(
     except Exception as exc:  # pragma: no cover - network/auth errors
         raise RuntimeError(
             append_env_details(
-                "Failed to authenticate to pyannote/speaker-diarization even though a Hugging Face token was provided.\n"
-                "Please confirm that the account associated with the token has accepted the model terms and that the token "
-                "retains access permissions.\n"
-                f"{_PYANNOTE_ACCESS_GUIDE}",
+                "Authentication to pyannote/speaker-diarization failed even though a Hugging Face token was provided.\n"
+                "Confirm that the account associated with the token has accepted the model terms and that the token retains "
+                "access permissions.\n"
+                f"{_PYANNOTE_ACCESS_STEPS}",
                 env_info,
             )
         ) from exc

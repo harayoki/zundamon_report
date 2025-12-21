@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import pathlib
+import re
 import subprocess
 import wave
 from typing import Sequence
@@ -11,11 +12,34 @@ from typing import Sequence
 from .envinfo import EnvironmentInfo, append_env_details, probe_ffmpeg
 
 
+_SUPPORTED_FFMPEG_MAJOR_VERSIONS = {4, 5, 6, 7}
+
+
+def _parse_ffmpeg_major_version(version_line: str | None) -> int | None:
+    if not version_line:
+        return None
+    match = re.search(r"ffmpeg version (\\d+)", version_line)
+    if not match:
+        return None
+    return int(match.group(1))
+
+
 def ensure_ffmpeg(ffmpeg_path: str = "ffmpeg", *, env_info: EnvironmentInfo | None = None) -> str:
     """Ensure ffmpeg is available; return the executable path or raise RuntimeError if not."""
     probe = probe_ffmpeg(ffmpeg_path)
     if env_info is not None:
         env_info.update_ffmpeg(probe)
+
+    if probe.available:
+        major_version = _parse_ffmpeg_major_version(probe.version)
+        if major_version is not None and major_version not in _SUPPORTED_FFMPEG_MAJOR_VERSIONS:
+            supported = "/".join(str(v) for v in sorted(_SUPPORTED_FFMPEG_MAJOR_VERSIONS))
+            msg = (
+                "ffmpeg は見つかりましたがサポート外のバージョンでした。"
+                f" 検出されたバージョン: {probe.version}。サポート対象: {supported} 系。"
+            )
+            raise RuntimeError(append_env_details(msg, env_info))
+
     if not probe.available:
         msg = f"ffmpeg必須です。README参照。ffmpeg が見つかりません (指定: {probe.path!r})。"
         if probe.error == "permission":
