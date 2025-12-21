@@ -18,10 +18,14 @@ _SUPPORTED_FFMPEG_MAJOR_VERSIONS = {4, 5, 6, 7}
 def _parse_ffmpeg_major_version(version_line: str | None) -> int | None:
     if not version_line:
         return None
-    match = re.search(r"ffmpeg version (\\d+)", version_line)
+    match = re.search(r"ffmpeg version\s+([^\s]+)", version_line)
     if not match:
         return None
-    return int(match.group(1))
+    version_token = re.sub(r"^[^\d]*", "", match.group(1))
+    major_match = re.match(r"(\d+)", version_token)
+    if not major_match:
+        return None
+    return int(major_match.group(1))
 
 
 def ensure_ffmpeg(ffmpeg_path: str = "ffmpeg", *, env_info: EnvironmentInfo | None = None) -> str:
