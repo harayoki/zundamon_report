@@ -37,13 +37,21 @@ def authenticate_only(hf_token: Optional[str], ffmpeg_path: str) -> None:
 
     diarize._configure_hf_auth(token)
     kwargs = diarize._build_pyannote_kwargs(PyannotePipeline, token)
+    # kwargs["revision"] = "2.1"
     try:
-        PyannotePipeline.from_pretrained("pyannote/speaker-diarization", **kwargs)
+        PyannotePipeline.from_pretrained("pyannote/speaker-diarization-3.1", **kwargs)
     except Exception as exc:  # pragma: no cover - network/auth errors
         raise RuntimeError(
             append_env_details(
-                "pyannote/speaker-diarization への認証に失敗しました。"
-                "利用規約への同意や Token の権限を確認してください。",
+                "pyannote/speaker-diarization への認証に失敗しました。\n"
+                "HuggingFace で以下 4 つのページすべてにアクセスし、'Agree and access repository' をクリックして承諾済みか確認してください。\n"
+                "# 1. https://huggingface.co/pyannote/speaker-diarization-3.1\n"
+                "# 2. https://huggingface.co/pyannote/segmentation-3.0\n"
+                "# 3. https://huggingface.co/pyannote/segmentation\n"
+                "# 4. https://huggingface.co/pyannote/speaker-diarization-community-1\n"
+                "\n"
+                "また、Token は 'Fine-grained' ではなく 'Classic (Read)' で作成したものを使用することを強く推奨します。\n"
+                "Token 設定URL: https://huggingface.co/settings/tokens\n",
                 env_info,
             )
         ) from exc

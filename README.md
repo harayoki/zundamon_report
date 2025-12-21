@@ -35,18 +35,19 @@ pip install -r requirements.txt
 - VOICEVOX Engine（ローカル起動を想定）
   - アプリ版ではなくエンジンを事前にダウンロードし、ポートを指定して起動しておいてください。
   - 例: `VOICEVOX_ENGINE_HOME=/path/to/engine ./run --host 127.0.0.1 --port 50021`
-- pyannote.audio の実行には Hugging Face Token が必要な場合があります。
-  - 環境変数 `PYANNOTE_TOKEN` または CLI 引数 `--hf-token` で指定してください。
-  - 事前に以下の手順でアクセス権を付与してください:
-    1. https://huggingface.co/pyannote/speaker-diarization と https://huggingface.co/pyannote/segmentation で利用規約に同意する
-    2. https://huggingface.co/settings/tokens でアクセストークンを作成する
-    3. 作成したトークンを `PYANNOTE_TOKEN` 環境変数または `--hf-token` で渡す
-  - 環境変数の設定例:
-    - Windows PowerShell: `setx PYANNOTE_TOKEN "hf_xxx"`
-    - Windows コマンドプロンプト（DOS 窓）: `set PYANNOTE_TOKEN=hf_xxx`
-    - macOS (csh): `setenv PYANNOTE_TOKEN hf_xxx`
-  - 上記が未設定のまま実行すると、最初に「文字起こしまでで終了する」旨を対話的に確認します。OK を選んだ場合は文字起こしのみ行い、`work/<run_id>/` に結果を残した上で終了します。
-  - `--speakers 1` を指定した場合は話者分離をスキップするため、Token 無しでも最後まで進みます。
+
+### pyannote.audio の実行には Hugging Face Token が必要です
+話者分離機能（`--speakers auto/2`）を利用する場合、Hugging Face の **Classic Token (Read)** が必要です。
+
+1. **4つのリポジトリすべて**で利用規約に同意（Accept）してください：
+   - [pyannote/speaker-diarization-3.1](https://huggingface.co/pyannote/speaker-diarization-3.1) (メイン)
+   - [pyannote/segmentation-3.0](https://huggingface.co/pyannote/segmentation-3.0) (分析モデル)
+   - [pyannote/segmentation](https://huggingface.co/pyannote/segmentation) (基盤モデル)
+   - [pyannote/speaker-diarization-community-1](https://huggingface.co/pyannote/speaker-diarization-community-1) (コミュニティデータ)
+2. [Hugging Face Settings](https://huggingface.co/settings/tokens) で **New token** を作成します。
+   - **重要：** Token type は **Classic** の **Read** を推奨します。
+   - ※Fine-grained token を使用する場合は、上記4つのリポジトリすべてに Read 権限を付与してください。
+3. 作成したトークンを環境変数 `PYANNOTE_TOKEN` または `--hf-token` で渡してください。
 
 ## 使い方
 ```bash
