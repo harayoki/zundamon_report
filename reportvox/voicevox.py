@@ -18,7 +18,12 @@ class VoiceVoxError(RuntimeError):
     """VOICEVOX API 呼び出しに失敗した際の例外。"""
 
 
-def _request_audio_query(text: str, speaker_id: int, base_url: str, env_info: EnvironmentInfo | None) -> dict:
+def _request_audio_query(
+    text: str,
+    speaker_id: int,
+    base_url: str,
+    env_info: EnvironmentInfo | None,
+) -> dict:
     resp = requests.post(f"{base_url}/audio_query", params={"text": text, "speaker": speaker_id})
     if resp.status_code != 200:
         raise VoiceVoxError(append_env_details(f"VOICEVOX audio_query に失敗しました: {resp.status_code} {resp.text}", env_info))
@@ -38,6 +43,7 @@ def synthesize_segments(
     characters: Dict[str, CharacterMeta],
     base_url: str,
     run_dir: pathlib.Path,
+    speed_scale: float,
     skip_existing: bool = False,
     progress: Callable[[int, int, float], None] | None = None,
     *,
@@ -60,6 +66,7 @@ def synthesize_segments(
             continue
         seg_start = time.monotonic()
         query = _request_audio_query(seg.text, meta.voicevox_speaker_id, base_url, env_info)
+        query["speedScale"] = speed_scale
         audio = _request_synthesis(query, meta.voicevox_speaker_id, base_url, env_info)
         out_path.write_bytes(audio)
         if progress is not None:

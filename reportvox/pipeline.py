@@ -70,6 +70,7 @@ class PipelineConfig:
     whisper_model: str
     llm_backend: LLMBackend
     hf_token: Optional[str] = None
+    speed_scale: float = 1.0
     resume_run_id: Optional[str] = None
 
 
@@ -344,6 +345,7 @@ def run_pipeline(config: PipelineConfig) -> None:
         characters={char1.id: char1, char2.id: char2},
         base_url=config.voicevox_url,
         run_dir=run_dir,
+        speed_scale=config.speed_scale,
         skip_existing=resume,
         progress=_synth_progress,
         env_info=env_info,
