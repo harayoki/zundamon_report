@@ -212,7 +212,7 @@ def run_pipeline(config: PipelineConfig) -> None:
         raise RuntimeError(
             append_env_details(
                 "pyannote diarization requires a Hugging Face token, but neither --hf-token nor PYANNOTE_TOKEN was set.\n"
-                f"{diarize._PYANNOTE_ACCESS_GUIDE}",
+                f"{diarize._PYANNOTE_ACCESS_STEPS}\n{diarize._PYANNOTE_TOKEN_USAGE}",
                 env_info,
             )
         )
