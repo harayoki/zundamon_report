@@ -9,6 +9,16 @@ from typing import Sequence
 from .pipeline import PipelineConfig, run_pipeline
 
 
+def _positive_float(value: str) -> float:
+    try:
+        number = float(value)
+    except ValueError as exc:  # pragma: no cover - argparse handles messaging
+        raise argparse.ArgumentTypeError(f"数値を指定してください: {value}") from exc
+    if number <= 0:
+        raise argparse.ArgumentTypeError(f"正の数を指定してください: {value}")
+    return number
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="reportvox",
@@ -35,6 +45,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--ffmpeg-path", default="ffmpeg", help="ffmpeg 実行ファイルへのパス。")
     parser.add_argument("--keep-work", action="store_true", help="work/ 以下の中間ファイルを削除せず残す。")
     parser.add_argument("--model", default="small", help="利用する Whisper モデルサイズ。")
+    parser.add_argument("--speed-scale", type=_positive_float, default=1.0, help="VOICEVOX の speedScale を指定。")
     parser.add_argument(
         "--resume",
         dest="resume_run_id",
@@ -78,6 +89,7 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
         whisper_model=args.model,
         llm_backend=args.llm,
         hf_token=args.hf_token,
+        speed_scale=args.speed_scale,
         resume_run_id=args.resume_run_id,
     )
 

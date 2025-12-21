@@ -66,6 +66,7 @@ python -m reportvox input.mp4 --speakers auto --mp3
 - --speakers {auto,1,2}: 話者数の扱い。
 - --model: Whisper のモデルサイズ。
 - --voicevox-url: VOICEVOX Engine のベース URL。
+- --speed-scale: VOICEVOX での読み上げ速度（デフォルト 1.0）。
 - --resume <run_id>: 中断した工程から再開。
 - --hf-token: Hugging Face Token。
 
