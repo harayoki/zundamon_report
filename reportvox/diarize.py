@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from typing import Iterable, List, Literal, Optional, Sequence
 
@@ -58,7 +59,13 @@ def diarize_audio(
     if token is None:
         raise RuntimeError("Hugging Face token is required for pyannote diarization (set --hf-token or PYANNOTE_TOKEN).")
 
-    pipeline = PyannotePipeline.from_pretrained("pyannote/speaker-diarization", use_auth_token=token)
+    _configure_hf_auth(token)
+
+    try:
+        pipeline = PyannotePipeline.from_pretrained("pyannote/speaker-diarization", use_auth_token=token)
+    except TypeError:
+        # pyannote.audio 3.x removed use_auth_token. Authentication is handled via huggingface_hub login/env.
+        pipeline = PyannotePipeline.from_pretrained("pyannote/speaker-diarization")
     diarization = pipeline(
         str(audio_path),
         min_speakers=1 if mode == "auto" else None,
@@ -118,3 +125,17 @@ def _pick_speaker(start: float, end: float, diarization: Sequence[DiarizedSegmen
 
 def _overlap(a_start: float, a_end: float, b_start: float, b_end: float) -> float:
     return max(0.0, min(a_end, b_end) - max(a_start, b_start))
+
+
+def _configure_hf_auth(token: str) -> None:
+    """Make HF token visible to pyannote.audio (supports 2.x/3.x)."""
+    try:
+        from huggingface_hub import login  # type: ignore
+    except Exception:
+        # Fall back to environment variables that huggingface_hub recognizes.
+        os.environ.setdefault("HF_TOKEN", token)
+        os.environ.setdefault("HUGGINGFACEHUB_API_TOKEN", token)
+        os.environ.setdefault("HUGGINGFACE_HUB_TOKEN", token)
+        return
+
+    login(token=token, add_to_git_credential=False)

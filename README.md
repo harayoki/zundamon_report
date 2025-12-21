@@ -102,3 +102,27 @@ python -m reportvox input.wav --voicevox-url http://127.0.0.1:50021
 - VOICEVOX が起動していない場合、合成でエラーとなります。
 - ffmpeg が無い場合は実行開始時にエラーとなります。
 - LLM 口調変換は差し替えやすい構造ですが、デフォルトではスキップされます。
+
+## トラブルシューティング
+### pyannote.audio の話者分離で `torchcodec` に関する警告と `Pipeline.from_pretrained()` の TypeError が出る
+```
+[reportvox +00:00] diarizing speakers (auto)...
+torchcodec is not installed correctly so built-in audio decoding will fail. Solutions are:
+...
+TypeError: Pipeline.from_pretrained() got an unexpected keyword argument 'use_auth_token'
+```
+
+上記のようなログが出て話者分離に失敗する場合は、以下を順に確認してください。
+
+1. **pyannote.audio を 3 系以降に更新する。** 3 系では `use_auth_token` が廃止されていますが、アプリ側で自動的に対応します。古い 2 系を使っている場合はアップグレードしてください。
+   ```bash
+   pip install -U "pyannote.audio>=3.0"
+   ```
+2. **torchcodec と PyTorch の組み合わせを見直す。** エラーメッセージに「PyTorch 2.8.0+cpu は対応外」といった文言が出る場合は、互換表（https://github.com/pytorch/torchcodec?tab=readme-ov-file#installing-torchcodec）を参照して対応するバージョンを入れ直してください。例:
+   ```bash
+   # CPU 環境の例
+   pip install --force-reinstall "torch==2.2.*+cpu" "torchcodec==0.2.*+cpu" -f https://download.pytorch.org/whl/torch_stable.html
+   ```
+3. **ffmpeg が正しくインストールされているか確認する。** `ffmpeg -version` が失敗する場合は、上記「ffmpeg 導入例」を参考に導入してください。
+
+上記を順に試しても解消しない場合は、暫定措置として `--speakers 1` で話者分離をスキップできます。
