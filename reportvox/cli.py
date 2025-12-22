@@ -88,7 +88,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--review-transcript",
         action="store_true",
-        help="文字起こし保存後に処理を一時停止し、transcript.json を手動で修正できるようにする。Enter を押すと再開します。",
+        help="文字起こし保存後に処理を停止し、transcript.json を手動で修正するために終了します。再開用コマンドを表示します。",
     )
     parser.add_argument(
         "--review-transcript-llm",

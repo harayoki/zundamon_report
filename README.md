@@ -77,7 +77,7 @@ python -m reportvox input.mp4 --speakers auto --mp3
 - --hf-token: Hugging Face Token。
 - --subtitles {off,all,split}: SRT 字幕の出力モード。off で出力なし、all ですべての発話をまとめた 1 ファイル、split で話者ごとに別ファイル。
 - --subtitle-max-chars: 字幕1枚あたりの最大文字数（デフォルト 25、0 で無制限）。
-- --review-transcript: 文字起こし結果を保存したあとで処理を一時停止し、transcript.json を手動修正してから続行できるようにする。
+- --review-transcript: 文字起こし結果を保存したあとで処理を停止し、transcript.json を手動修正したうえで表示される再開コマンドを実行して続行できるようにする。
 - --review-transcript-llm: 文字起こし結果を保存したあと、LLM で明らかな誤字脱字を自動校正してから続行する（--llm でバックエンド指定）。
 
 ## カスタム話者・口癖の追加

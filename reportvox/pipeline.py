@@ -56,6 +56,36 @@ def _estimate_remaining(total_steps: int, steps_done: int, elapsed: float) -> fl
     return avg * (total_steps - steps_done)
 
 
+def _build_resume_command(config: PipelineConfig, run_id: str) -> str:
+    parts: list[str] = ["python -m reportvox", f"--resume {run_id}"]
+    parts.append(f"--voicevox-url {config.voicevox_url}")
+    parts.append(f"--speakers {config.speakers}")
+    parts.append(f"--speaker1 {config.speaker1}")
+    parts.append(f"--speaker2 {config.speaker2}")
+    if config.zunda_senior_job:
+        parts.append(f"--zunda-senior-job {config.zunda_senior_job}")
+    if config.zunda_junior_job:
+        parts.append(f"--zunda-junior-job {config.zunda_junior_job}")
+    parts.append(f"--ffmpeg-path {config.ffmpeg_path}")
+    parts.append(f"--model {config.whisper_model}")
+    parts.append(f"--llm {config.llm_backend}")
+    if config.speed_scale != 1.0:
+        parts.append(f"--speed-scale {config.speed_scale}")
+    if config.subtitle_mode != "off":
+        parts.append(f"--subtitles {config.subtitle_mode}")
+        parts.append(f"--subtitle-max-chars {config.subtitle_max_chars}")
+    if config.want_mp3:
+        parts.append("--mp3")
+        parts.append(f"--bitrate {config.mp3_bitrate}")
+    if config.keep_work:
+        parts.append("--keep-work")
+    if config.review_transcript == "manual":
+        parts.append("--review-transcript")
+    elif config.review_transcript == "llm":
+        parts.append("--review-transcript-llm")
+    return " ".join(parts)
+
+
 @dataclass
 class PipelineConfig:
     input_audio: pathlib.Path | None
@@ -324,13 +354,10 @@ def run_pipeline(config: PipelineConfig) -> None:
         transcript_path.write_text(json.dumps(whisper_result.as_json(), ensure_ascii=False, indent=2), encoding="utf-8")
         reporter.log("文字起こしが完了し保存しました。")
         if config.review_transcript == "manual":
-            reporter.log(
-                "transcript.json を開いて明らかな誤字脱字を修正できます。編集後 Enter を押すと次の工程へ進みます。"
-            )
-            try:
-                input("続行するには Enter を押してください...")
-            except EOFError:
-                reporter.log("入力を受け取れなかったため、そのまま続行します。")
+            resume_cmd = _build_resume_command(config, run_id)
+            reporter.log("transcript.json を開いて明らかな誤字脱字を修正できます。修正後、次のコマンドで再開してください。")
+            reporter.log(resume_cmd)
+            return
         elif config.review_transcript == "llm":
             reporter.log("LLM で文字起こしを校正しています...")
             try:
