@@ -75,6 +75,7 @@ class PipelineConfig:
     resume_run_id: Optional[str] = None
     subtitle_mode: SubtitleMode = "off"
     subtitle_max_chars: int = 25
+    review_transcript: bool = False
 
 
 def _ensure_paths() -> tuple[pathlib.Path, pathlib.Path]:
@@ -284,6 +285,14 @@ def run_pipeline(config: PipelineConfig) -> None:
         )
         transcript_path.write_text(json.dumps(whisper_result.as_json(), ensure_ascii=False, indent=2), encoding="utf-8")
         reporter.log("文字起こしが完了し保存しました。")
+        if config.review_transcript:
+            reporter.log(
+                "transcript.json を開いて明らかな誤字脱字を修正できます。編集後 Enter を押すと次の工程へ進みます。"
+            )
+            try:
+                input("続行するには Enter を押してください...")
+            except EOFError:
+                reporter.log("入力を受け取れなかったため、そのまま続行します。")
     _complete_step("文字起こし工程が完了しました。", step_start)
 
     step_start = reporter.now()

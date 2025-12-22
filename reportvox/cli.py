@@ -85,6 +85,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=25,
         help="字幕1枚あたりの最大文字数。0 で制限なし。デフォルトは 25 で、細かく切り替わる字幕を生成します。",
     )
+    parser.add_argument(
+        "--review-transcript",
+        action="store_true",
+        help="文字起こし保存後に処理を一時停止し、transcript.json を手動で修正できるようにする。Enter を押すと再開します。",
+    )
     return parser
 
 
@@ -115,6 +120,7 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
         resume_run_id=args.resume_run_id,
         subtitle_mode=args.subtitles,
         subtitle_max_chars=args.subtitle_max_chars,
+        review_transcript=args.review_transcript,
     )
 
 
