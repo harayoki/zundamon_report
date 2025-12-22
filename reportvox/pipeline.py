@@ -13,11 +13,12 @@ from typing import Dict, Literal, Optional, Sequence
 
 from . import diarize, transcribe, style_convert, voicevox, audio, characters, subtitles
 from .envinfo import EnvironmentInfo, append_env_details
+from .llm_client import LLMBackend, chat_completion
 
 
 SpeakerMode = Literal["auto", "1", "2"]
-LLMBackend = Literal["none", "openai", "local"]
 SubtitleMode = Literal["off", "all", "split"]
+TranscriptReviewMode = Literal["off", "manual", "llm"]
 
 
 class _ProgressReporter:
@@ -75,7 +76,7 @@ class PipelineConfig:
     resume_run_id: Optional[str] = None
     subtitle_mode: SubtitleMode = "off"
     subtitle_max_chars: int = 25
-    review_transcript: bool = False
+    review_transcript: TranscriptReviewMode = "off"
 
 
 def _ensure_paths() -> tuple[pathlib.Path, pathlib.Path]:
@@ -108,6 +109,43 @@ def _load_transcription(path: pathlib.Path) -> transcribe.TranscriptionResult:
     ]
     text = str(data.get("text", ""))
     return transcribe.TranscriptionResult(segments=segments, text=text)
+
+
+def _llm_review_transcription(
+    result: transcribe.TranscriptionResult, *, backend: LLMBackend, env_info: EnvironmentInfo | None = None
+) -> transcribe.TranscriptionResult:
+    system_prompt = (
+        "あなたは日本語の文字起こしの校正アシスタントです。"
+        " 明らかな誤字脱字のみを修正し、話者の意図を変えないでください。"
+        " segments 配列の start/end は変更せず、text のみを書き換えてください。"
+        " JSON の構造は {\"segments\": [...], \"text\": \"...\"} のまま返してください。"
+    )
+    user_prompt = (
+        "次の JSON の text と segments[*].text の明らかな誤字脱字を修正してください。\n"
+        "start と end の値、segments の長さは絶対に変えないでください。\n"
+        f"{json.dumps(result.as_json(), ensure_ascii=False)}"
+    )
+    content = chat_completion(system_prompt=system_prompt, user_prompt=user_prompt, backend=backend, env_info=env_info)
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(append_env_details("LLM の応答を JSON として読み取れませんでした。", env_info)) from exc
+
+    segments_in = data.get("segments")
+    if not isinstance(segments_in, list) or len(segments_in) != len(result.segments):
+        raise RuntimeError(
+            append_env_details("LLM の応答形式が不正です（segments の数が一致しません）。", env_info)
+        )
+
+    reviewed_segments: list[dict] = []
+    for original, revised in zip(result.segments, segments_in):
+        text = revised.get("text", original.get("text", ""))
+        reviewed_segments.append(
+            {"start": float(original["start"]), "end": float(original["end"]), "text": str(text).strip()}
+        )
+
+    reviewed_text = str(data.get("text", result.text)).strip()
+    return transcribe.TranscriptionResult(segments=reviewed_segments, text=reviewed_text)
 
 
 def _load_diarization(path: pathlib.Path) -> list[diarize.DiarizedSegment]:
@@ -285,7 +323,7 @@ def run_pipeline(config: PipelineConfig) -> None:
         )
         transcript_path.write_text(json.dumps(whisper_result.as_json(), ensure_ascii=False, indent=2), encoding="utf-8")
         reporter.log("文字起こしが完了し保存しました。")
-        if config.review_transcript:
+        if config.review_transcript == "manual":
             reporter.log(
                 "transcript.json を開いて明らかな誤字脱字を修正できます。編集後 Enter を押すと次の工程へ進みます。"
             )
@@ -293,6 +331,18 @@ def run_pipeline(config: PipelineConfig) -> None:
                 input("続行するには Enter を押してください...")
             except EOFError:
                 reporter.log("入力を受け取れなかったため、そのまま続行します。")
+        elif config.review_transcript == "llm":
+            reporter.log("LLM で文字起こしを校正しています...")
+            try:
+                whisper_result = _llm_review_transcription(
+                    whisper_result, backend=config.llm_backend, env_info=env_info
+                )
+                transcript_path.write_text(
+                    json.dumps(whisper_result.as_json(), ensure_ascii=False, indent=2), encoding="utf-8"
+                )
+                reporter.log("LLM による校正を完了し、transcript.json を更新しました。")
+            except Exception as exc:
+                reporter.log(f"LLM 校正に失敗したため、元の文字起こしで続行します: {exc}")
     _complete_step("文字起こし工程が完了しました。", step_start)
 
     step_start = reporter.now()

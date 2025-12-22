@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from typing import Iterable, List, Literal, Optional, Sequence
+from typing import Iterable, List, Optional, Sequence
 
 from .diarize import AlignedSegment
 from .characters import CharacterMeta
-
-LLMBackend = Literal["none", "openai", "local"]
+from .llm_client import LLMBackend, chat_completion
 
 
 @dataclass
@@ -46,9 +45,17 @@ def _heuristic_phrase(segment: AlignedSegment, meta: CharacterMeta, inserted: se
 def _llm_transform(text: str, meta: CharacterMeta, backend: LLMBackend) -> str:
     if backend == "none":
         return text
-    # 切り替え可能なバックエンドの差し込みポイント
-    # いまは外部依存を増やさないため何も変換せず返す。
-    return text
+    system_prompt = (
+        "あなたは日本語の文体調整アシスタントです。"
+        " 与えられた文章を話し言葉として自然にし、明らかな誤字脱字を直してください。"
+        " 文意や固有名詞は変えず、1文で返してください。"
+    )
+    user_prompt = f"キャラクター: {meta.display_name or meta.id}\n文章: {text}"
+    try:
+        return chat_completion(system_prompt=system_prompt, user_prompt=user_prompt, backend=backend)
+    except Exception:
+        # LLM が利用できない場合は元のテキストを返して処理継続
+        return text
 
 
 def apply_style(

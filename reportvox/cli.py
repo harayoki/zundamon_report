@@ -90,6 +90,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="文字起こし保存後に処理を一時停止し、transcript.json を手動で修正できるようにする。Enter を押すと再開します。",
     )
+    parser.add_argument(
+        "--review-transcript-llm",
+        action="store_true",
+        help="文字起こし保存後に LLM で明らかな誤字脱字を校正してから次の工程へ進みます (--llm でバックエンド指定)。",
+    )
     return parser
 
 
@@ -100,7 +105,15 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
     if args.input is None and args.resume_run_id is None:
         parser.error("--resume を指定しない場合は入力ファイルが必要です。")
 
+    if args.review_transcript and args.review_transcript_llm:
+        parser.error("--review-transcript と --review-transcript-llm は同時に指定できません。")
+
     input_path = pathlib.Path(args.input).expanduser().resolve() if args.input else None
+    review_mode = "off"
+    if args.review_transcript_llm:
+        review_mode = "llm"
+    elif args.review_transcript:
+        review_mode = "manual"
     return PipelineConfig(
         input_audio=input_path,
         voicevox_url=args.voicevox_url,
@@ -120,7 +133,7 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
         resume_run_id=args.resume_run_id,
         subtitle_mode=args.subtitles,
         subtitle_max_chars=args.subtitle_max_chars,
-        review_transcript=args.review_transcript,
+        review_transcript=review_mode,
     )
 
 
