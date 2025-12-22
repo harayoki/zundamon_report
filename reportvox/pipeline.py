@@ -151,14 +151,12 @@ def _build_target_durations(
         scale = target_total / original_total
 
     durations: list[float] = []
-    prev_time = 0.0
     for idx, seg in enumerate(segments):
         next_start = segments[idx + 1].start if idx + 1 < len(segments) else seg.end
-        base = max(0.0, next_start - prev_time)
-        if base <= 0:
-            base = 0.05
+        gap_to_next = max(0.0, next_start - seg.start)
+        segment_length = max(0.0, seg.end - seg.start)
+        base = max(gap_to_next, segment_length, 0.05)
         durations.append(max(base * scale, 0.05))
-        prev_time = next_start
     return durations, original_total, target_total
 
 
