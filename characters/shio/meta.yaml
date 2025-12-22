@@ -1,0 +1,12 @@
+id: shio
+display_name: 剣崎雌雄
+voicevox:
+  speaker_id: 24
+style:
+  first_person: 俺
+  endings: ["だ", "だぜ"]
+  role: 頼もしい兄貴分
+phrases:
+  idea_intro: ["ケンザキメスオだ。任せてくれ"]
+  explanation_start: ["男前にポイントを押さえていくぜ"]
+  conclusion: ["これで決まりだな"]

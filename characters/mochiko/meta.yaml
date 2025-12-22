@@ -1,0 +1,12 @@
+id: mochiko
+display_name: もち子（CV 明日葉よもぎ）
+voicevox:
+  speaker_id: 23
+style:
+  first_person: わたし
+  endings: ["だよ", "かな"]
+  role: 親しみやすい先輩
+phrases:
+  idea_intro: ["もち子だよ。肩の力を抜いていこう"]
+  explanation_start: ["ゆるっとまとめて説明するね"]
+  conclusion: ["こんな感じでどうかな？"]

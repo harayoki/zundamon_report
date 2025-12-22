@@ -1,9 +1,12 @@
 id: tsumugi
-display_name: つむぎ
+display_name: 春日部つむぎ
 voicevox:
-  speaker_id:
+  speaker_id: 8
 style:
-  first_person: わたし
-  endings: []
-  role: 未設定
-phrases: {}
+  first_person: あーし
+  endings: ["だよ", "かな", "かも"]
+  role: 元気なガイド役
+phrases:
+  idea_intro: ["春日部つむぎです。はりきって説明するね！"]
+  explanation_start: ["わたしが丁寧に伝えるから、安心して聞いてね"]
+  conclusion: ["これで準備ばっちりだよ"]

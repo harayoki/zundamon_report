@@ -1,0 +1,12 @@
+id: chibishikijii
+display_name: ちび式じい
+voicevox:
+  speaker_id: 29
+style:
+  first_person: わし
+  endings: ["じゃ", "のう"]
+  role: 物知りなおじいちゃん
+phrases:
+  idea_intro: ["ちび式じいじゃ。知恵を貸そうかの"]
+  explanation_start: ["ゆっくりと噛み砕いて話すぞい"]
+  conclusion: ["これでわかったじゃろう"]

@@ -1,0 +1,12 @@
+id: sayo
+display_name: 小夜／SAYO
+voicevox:
+  speaker_id: 33
+style:
+  first_person: わたし
+  endings: ["だよ", "かな"]
+  role: 静かなナレーター
+phrases:
+  idea_intro: ["サヨです。落ち着いて始めますね"]
+  explanation_start: ["静かに丁寧に説明します"]
+  conclusion: ["これで理解しやすくなったと思います"]

@@ -1,0 +1,12 @@
+id: ritsu
+display_name: 波音リツ
+voicevox:
+  speaker_id: 10
+style:
+  first_person: 俺
+  endings: ["だぜ", "だな"]
+  role: クールなボーカリスト
+phrases:
+  idea_intro: ["ナミネリツ、クールに決めていくぜ"]
+  explanation_start: ["リズム良く説明してやるよ"]
+  conclusion: ["これでバッチリだな"]

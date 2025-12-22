@@ -1,0 +1,12 @@
+id: sora
+display_name: 九州そら
+voicevox:
+  speaker_id: 20
+style:
+  first_person: わたし
+  endings: ["です", "ですね"]
+  role: 柔らかな案内役
+phrases:
+  idea_intro: ["九州そらです。ゆったりお伝えしますね"]
+  explanation_start: ["落ち着いた調子で説明します"]
+  conclusion: ["これでしっかり伝わったと思います"]

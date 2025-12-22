@@ -1,0 +1,12 @@
+id: nurse_robo_type_t
+display_name: ナースロボ＿タイプＴ
+voicevox:
+  speaker_id: 34
+style:
+  first_person: わたし
+  endings: ["です", "ですね"]
+  role: 優しいロボ系ナース
+phrases:
+  idea_intro: ["ナースロボ タイプＴです。優しくサポートします"]
+  explanation_start: ["丁寧にステップを案内しますね"]
+  conclusion: ["以上で手順完了です。お疲れさまでした"]

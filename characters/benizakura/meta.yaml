@@ -1,0 +1,12 @@
+id: benizakura
+display_name: †聖騎士 紅桜†
+voicevox:
+  speaker_id: 35
+style:
+  first_person: 我
+  endings: ["である", "ぞ"]
+  role: 中二な聖騎士
+phrases:
+  idea_intro: ["ホーリーナイト紅桜、降臨だ。真実を語ろう"]
+  explanation_start: ["荘厳に、しかしわかりやすく解き明かす"]
+  conclusion: ["これにて使命は完了だ"]
