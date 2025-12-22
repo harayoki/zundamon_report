@@ -167,7 +167,10 @@ def join_wavs(
         else:
             audio_data = audio_data.reshape((-1, 1))
 
-        start_frame = max(0, int(round(start_sec * framerate)))
+        # ターゲット尺より実際の音声が長い場合に後続が潰れないよう、
+        # 既に書き込んだ末尾より手前には配置しない。
+        planned_start_frame = max(0, int(round(start_sec * framerate)))
+        start_frame = max(planned_start_frame, buffer.shape[0])
         end_frame = start_frame + audio_data.shape[0]
 
         if end_frame > buffer.shape[0]:
