@@ -99,6 +99,16 @@ def build_parser() -> argparse.ArgumentParser:
         default=25,
         help="字幕1枚あたりの最大文字数。0 で制限なし。デフォルトは 25。",
     )
+    parser.add_argument(
+        "--review-transcript",
+        action="store_true",
+        help="文字起こし保存後に処理を停止し、transcript.json を手動で修正するために終了します。再開用コマンドを表示します。",
+    )
+    parser.add_argument(
+        "--review-transcript-llm",
+        action="store_true",
+        help="文字起こし保存後に LLM で明らかな誤字脱字を校正してから次の工程へ進みます (--llm でバックエンド指定)。",
+    )
     return parser
 
 
@@ -109,7 +119,15 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
     if args.input is None and args.resume_run_id is None:
         parser.error("--resume を指定しない場合は入力ファイルが必要です。")
 
+    if args.review_transcript and args.review_transcript_llm:
+        parser.error("--review-transcript と --review-transcript-llm は同時に指定できません。")
+
     input_path = pathlib.Path(args.input).expanduser().resolve() if args.input else None
+    review_mode = "off"
+    if args.review_transcript_llm:
+        review_mode = "llm"
+    elif args.review_transcript:
+        review_mode = "manual"
     return PipelineConfig(
         input_audio=input_path,
         voicevox_url=args.voicevox_url,
@@ -131,6 +149,7 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
         resume_run_id=args.resume_run_id,
         subtitle_mode=args.subtitles,
         subtitle_max_chars=args.subtitle_max_chars,
+        review_transcript=review_mode,
     )
 
 
