@@ -135,13 +135,35 @@ def write_subtitles(
 
 
 def align_segments_to_audio(
-    segments: Sequence[StylizedSegment], audio_paths: Sequence[pathlib.Path]
+    segments: Sequence[StylizedSegment],
+    audio_paths: Sequence[pathlib.Path],
+    *,
+    placements: Sequence[tuple[float, float]] | None = None,
 ) -> list[StylizedSegment]:
     """VOICEVOX で生成された音声ファイルの長さに合わせてセグメントの時間を再配置する。"""
     if len(segments) != len(audio_paths):
         raise ValueError(f"セグメント数 ({len(segments)}) と音声ファイル数 ({len(audio_paths)}) が一致しません。")
 
     retimed: list[StylizedSegment] = []
+
+    if placements is not None:
+        if len(placements) != len(segments):
+            raise ValueError(
+                f"セグメント数 ({len(segments)}) と配置情報の数 ({len(placements)}) が一致しません。"
+            )
+        for segment, placement in zip(segments, placements):
+            start, end = placement
+            retimed.append(
+                StylizedSegment(
+                    start=start,
+                    end=end,
+                    text=segment.text,
+                    speaker=segment.speaker,
+                    character=segment.character,
+                )
+            )
+        return retimed
+
     cursor = 0.0
     for segment, path in zip(segments, audio_paths):
         with wave.open(str(path), "rb") as wf:
