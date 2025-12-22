@@ -71,6 +71,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--model", default="small", help="利用する Whisper モデルサイズ（tiny/base/small/medium/large）。")
     parser.add_argument("--speed-scale", type=_positive_float, default=1.1, help="VOICEVOX の speedScale を指定（デフォルト 1.1）。")
     parser.add_argument(
+        "--duration",
+        type=_positive_float,
+        default=None,
+        help="出力音声全体のおおよその長さ（秒）。指定すると全体尺を引き伸ばし/短縮します。",
+    )
+    parser.add_argument(
         "--resume",
         dest="resume_run_id",
         default=None,
@@ -146,6 +152,7 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
         llm_backend=args.llm,
         hf_token=args.hf_token,
         speed_scale=args.speed_scale,
+        output_duration=args.duration,
         resume_run_id=args.resume_run_id,
         subtitle_mode=args.subtitles,
         subtitle_max_chars=args.subtitle_max_chars,

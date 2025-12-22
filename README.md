@@ -81,7 +81,8 @@ python -m reportvox input.mp4 --speakers auto --mp3
 - --speakers {auto,1,2}: 話者数の扱い。
 - --model: Whisper のモデルサイズ。
 - --voicevox-url: VOICEVOX Engine のベース URL。
-- --speed-scale: VOICEVOX での読み上げ速度（デフォルト 1.0）。
+- --speed-scale: VOICEVOX での読み上げ速度（デフォルト 1.1）。発話の間隔は維持されるため、音声全体の長さはほぼ変わりません。
+- --duration: 出力音声全体のおおよその長さ（秒）。字幕の時間位置もこの尺に合わせて引き伸ばし/短縮します。
 - --output-name: 出力ファイル名のベース（拡張子不要）。mp3/字幕にも同名を適用。
 - -f, --force: 出力の上書き確認をスキップ。
 - --mp3: mp3 を生成（out/ には mp3 だけを出力）。
@@ -93,6 +94,10 @@ python -m reportvox input.mp4 --speakers auto --mp3
 - --subtitle-max-chars: 字幕1枚あたりの最大文字数（デフォルト 25、0 で無制限）。
 - --review-transcript: 文字起こし結果を保存したあとで処理を停止し、transcript.json を手動修正したうえで表示される再開コマンドを実行して続行できるようにする。
 - --review-transcript-llm: 文字起こし結果を保存したあと、LLM で明らかな誤字脱字を自動校正してから続行する（--llm でバックエンド指定）。
+
+### スピード/尺指定の考え方
+- 話者のスピード（--speed-scale）は口の動きのみを変えます。発話間隔や字幕の時間は基本的に維持されるため、全体尺はほぼ変わりません。
+- 全体の尺を変えたい場合は --duration で目標秒数を指定してください。音声と字幕のタイミングをまとめて引き伸ばし/短縮します（短縮しすぎると音声が途切れる場合があります）。
 
 ## カスタム話者・口癖の追加
 新しいキャラクターの追加や口癖の調整方法は「[キャラクター追加・口癖設定ガイド](docs/characters.md)」にまとめています。
