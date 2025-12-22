@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pathlib
+import wave
 from typing import Dict, List, Literal, Sequence
 
 from .style_convert import StylizedSegment
@@ -131,6 +132,35 @@ def write_subtitles(
         subtitle_paths.append(path)
 
     return subtitle_paths
+
+
+def align_segments_to_audio(
+    segments: Sequence[StylizedSegment], audio_paths: Sequence[pathlib.Path]
+) -> list[StylizedSegment]:
+    """VOICEVOX で生成された音声ファイルの長さに合わせてセグメントの時間を再配置する。"""
+    if len(segments) != len(audio_paths):
+        raise ValueError(f"セグメント数 ({len(segments)}) と音声ファイル数 ({len(audio_paths)}) が一致しません。")
+
+    retimed: list[StylizedSegment] = []
+    cursor = 0.0
+    for segment, path in zip(segments, audio_paths):
+        with wave.open(str(path), "rb") as wf:
+            frames = wf.getnframes()
+            framerate = wf.getframerate() or 1
+            duration = frames / framerate
+        start = cursor
+        end = start + duration
+        cursor = end
+        retimed.append(
+            StylizedSegment(
+                start=start,
+                end=end,
+                text=segment.text,
+                speaker=segment.speaker,
+                character=segment.character,
+            )
+        )
+    return retimed
 
 
 def _explode_segments(

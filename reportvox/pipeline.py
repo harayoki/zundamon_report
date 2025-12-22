@@ -336,20 +336,6 @@ def run_pipeline(config: PipelineConfig) -> None:
 
     base_stem = (config.input_audio or input_path).stem
 
-    if config.subtitle_mode != "off":
-        reporter.log("字幕ファイルを生成しています...")
-        step_start = reporter.now()
-        subtitle_paths = subtitles.write_subtitles(
-            stylized,
-            out_dir=out_dir,
-            base_stem=base_stem,
-            mode=config.subtitle_mode,
-            characters={char1.id: char1, char2.id: char2},
-            max_chars_per_line=config.subtitle_max_chars,
-        )
-        reporter.log(f"字幕を出力しました: {[p.name for p in subtitle_paths]}")
-        _complete_step("字幕ファイルの生成が完了しました。", step_start)
-
     reporter.log("VOICEVOX で音声合成を実行しています...")
     step_start = reporter.now()
     synth_durations: list[float] = []
@@ -372,6 +358,21 @@ def run_pipeline(config: PipelineConfig) -> None:
         env_info=env_info,
     )
     _complete_step("VOICEVOX での合成が完了しました。", step_start)
+
+    if config.subtitle_mode != "off":
+        reporter.log("字幕ファイルを生成しています...")
+        step_start = reporter.now()
+        subtitle_segments = subtitles.align_segments_to_audio(stylized, synthesized_paths)
+        subtitle_paths = subtitles.write_subtitles(
+            subtitle_segments,
+            out_dir=out_dir,
+            base_stem=base_stem,
+            mode=config.subtitle_mode,
+            characters={char1.id: char1, char2.id: char2},
+            max_chars_per_line=config.subtitle_max_chars,
+        )
+        reporter.log(f"字幕を出力しました: {[p.name for p in subtitle_paths]}")
+        _complete_step("字幕ファイルの生成が完了しました。", step_start)
 
     output_wav = out_dir / f"{base_stem}_report.wav"
     reporter.log(f"音声を結合しています -> {output_wav}")
