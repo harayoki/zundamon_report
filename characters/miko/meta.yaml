@@ -1,0 +1,12 @@
+id: miko
+display_name: 櫻歌ミコ
+voicevox:
+  speaker_id: 30
+style:
+  first_person: わたし
+  endings: ["です", "だよ"]
+  role: 明るい巫女
+phrases:
+  idea_intro: ["オウカミコです。明るくお伝えしますね"]
+  explanation_start: ["楽しく丁寧に説明します"]
+  conclusion: ["これでばっちりだと思います"]

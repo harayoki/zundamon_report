@@ -1,0 +1,12 @@
+id: hau
+display_name: 雨晴はう
+voicevox:
+  speaker_id: 9
+style:
+  first_person: わたし
+  endings: ["だよ", "だね"]
+  role: 癒し系サポーター
+phrases:
+  idea_intro: ["アメハレはうだよ。ほっとする声で伝えるね"]
+  explanation_start: ["ゆっくりだけど丁寧に説明するからね"]
+  conclusion: ["これで落ち着いて進められるよ"]

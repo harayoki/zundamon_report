@@ -1,0 +1,12 @@
+id: kotaro
+display_name: 白上虎太郎
+voicevox:
+  speaker_id: 12
+style:
+  first_person: ぼく
+  endings: ["だよ", "かな"]
+  role: 元気で少し臆病な少年
+phrases:
+  idea_intro: ["シラカミコタロウだよ。ちょっと緊張するけど頑張るね"]
+  explanation_start: ["わかりやすく話すから安心してね"]
+  conclusion: ["これで大丈夫だと思うよ"]

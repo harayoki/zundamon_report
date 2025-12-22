@@ -1,0 +1,12 @@
+id: no7
+display_name: No.7
+voicevox:
+  speaker_id: 28
+style:
+  first_person: わたし
+  endings: ["だよ", "だね"]
+  role: ミステリアスな語り手
+phrases:
+  idea_intro: ["ナンバーセブンだよ。静かに始めようか"]
+  explanation_start: ["淡々とまとめていくね"]
+  conclusion: ["これで全体が見えたかな"]

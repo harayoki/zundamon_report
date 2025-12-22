@@ -1,0 +1,12 @@
+id: takehiro
+display_name: 玄野武宏
+voicevox:
+  speaker_id: 11
+style:
+  first_person: 俺
+  endings: ["だ", "だな"]
+  role: 落ち着いた語り手
+phrases:
+  idea_intro: ["クロノタケヒロだ。落ち着いて説明しよう"]
+  explanation_start: ["要点を押さえて順番に話すぞ"]
+  conclusion: ["これで理解しやすくなったはずだ"]

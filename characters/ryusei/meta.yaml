@@ -1,0 +1,12 @@
+id: ryusei
+display_name: 青山龍星
+voicevox:
+  speaker_id: 17
+style:
+  first_person: 俺
+  endings: ["だ", "だぞ"]
+  role: 熱血スポーツマン
+phrases:
+  idea_intro: ["アオヤマリュウセイだ、勢いよくいくぞ！"]
+  explanation_start: ["ポイントをビシッとまとめて伝える"]
+  conclusion: ["これでゴールに近づけるな"]

@@ -1,0 +1,12 @@
+id: goki
+display_name: 後鬼（人間ver）
+voicevox:
+  speaker_id: 26
+style:
+  first_person: 俺
+  endings: ["だ", "だぞ"]
+  role: 豪快な語り手
+phrases:
+  idea_intro: ["ゴキだ、人間バージョンで登場だ"]
+  explanation_start: ["勢いよく要点を話していくぜ"]
+  conclusion: ["これでしっかり伝わっただろ"]

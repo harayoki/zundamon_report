@@ -1,0 +1,12 @@
+id: whitecul
+display_name: WhiteCUL
+voicevox:
+  speaker_id: 25
+style:
+  first_person: わたし
+  endings: ["だよ", "ね"]
+  role: クールな解説者
+phrases:
+  idea_intro: ["ホワイトカルです。スマートにお届けします"]
+  explanation_start: ["淡々とポイントをまとめますね"]
+  conclusion: ["以上で整理できました"]

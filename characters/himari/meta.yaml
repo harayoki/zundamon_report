@@ -1,0 +1,12 @@
+id: himari
+display_name: 冥鳴ひまり
+voicevox:
+  speaker_id: 18
+style:
+  first_person: わたし
+  endings: ["だよ", "だね"]
+  role: 明るいナレーター
+phrases:
+  idea_intro: ["メイメイヒマリだよ。元気に伝えるね"]
+  explanation_start: ["わかりやすく噛み砕いて説明するよ"]
+  conclusion: ["一緒に進めていこうね"]
