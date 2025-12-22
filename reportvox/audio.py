@@ -82,6 +82,14 @@ def _read_params(path: pathlib.Path) -> tuple[int, int, int, int]:
         return (wf.getnchannels(), wf.getsampwidth(), wf.getframerate(), wf.getnframes())
 
 
+def read_wav_duration(path: pathlib.Path) -> float:
+    """WAV ファイルの長さ（秒）を取得する。"""
+    with wave.open(str(path), "rb") as wf:
+        frames = wf.getnframes()
+        framerate = wf.getframerate() or 1
+    return frames / framerate
+
+
 def join_wavs(inputs: Sequence[pathlib.Path], output: pathlib.Path, *, env_info: EnvironmentInfo | None = None) -> None:
     if not inputs:
         raise ValueError(append_env_details("結合対象の WAV がありません。", env_info))
@@ -122,3 +130,47 @@ def convert_to_mp3(
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except subprocess.CalledProcessError as exc:
         raise RuntimeError(append_env_details("ffmpegによるmp3生成に失敗しました。", env_info)) from exc
+
+
+def time_stretch_wav(
+    src: pathlib.Path,
+    dest: pathlib.Path,
+    *,
+    target_duration: float,
+    ffmpeg_path: str = "ffmpeg",
+    env_info: EnvironmentInfo | None = None,
+) -> None:
+    """ffmpeg の atempo フィルターで WAV を時間伸縮する。"""
+    current_duration = read_wav_duration(src)
+    if target_duration <= 0 or current_duration <= 0:
+        raise ValueError(append_env_details("時間伸縮には正の長さが必要です。", env_info))
+    ratio = target_duration / current_duration
+    if abs(ratio - 1.0) < 1e-3:
+        # ほぼ同じ長さならコピーのみ
+        dest.write_bytes(src.read_bytes())
+        return
+
+    filters: list[str] = []
+    remaining = ratio
+    while remaining > 2.0:
+        filters.append("atempo=2.0")
+        remaining /= 2.0
+    while remaining < 0.5:
+        filters.append("atempo=0.5")
+        remaining /= 0.5
+    filters.append(f"atempo={remaining:.6f}")
+    filter_arg = ",".join(filters)
+
+    cmd = [
+        ffmpeg_path,
+        "-y",
+        "-i",
+        str(src),
+        "-filter:a",
+        filter_arg,
+        str(dest),
+    ]
+    try:
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(append_env_details("ffmpegによる時間伸縮に失敗しました。", env_info)) from exc

@@ -71,6 +71,8 @@ def _build_resume_command(config: PipelineConfig, run_id: str) -> str:
     parts.append(f"--llm {config.llm_backend}")
     if config.speed_scale != 1.0:
         parts.append(f"--speed-scale {config.speed_scale}")
+    if config.output_duration:
+        parts.append(f"--duration {config.output_duration}")
     if config.subtitle_mode != "off":
         parts.append(f"--subtitles {config.subtitle_mode}")
         parts.append(f"--subtitle-max-chars {config.subtitle_max_chars}")
@@ -105,6 +107,7 @@ class PipelineConfig:
     llm_backend: LLMBackend
     hf_token: Optional[str] = None
     speed_scale: float = 1.1
+    output_duration: Optional[float] = None
     resume_run_id: Optional[str] = None
     subtitle_mode: SubtitleMode = "off"
     subtitle_max_chars: int = 25
@@ -126,6 +129,37 @@ def _resolve_output_stem(config: PipelineConfig, input_path: pathlib.Path) -> st
         return stem or candidate
     input_stem = (config.input_audio or input_path).stem
     return f"{input_stem}_report"
+
+
+def _estimate_total_duration(segments: Sequence[style_convert.StylizedSegment]) -> float:
+    if not segments:
+        return 0.0
+    max_end = max(seg.end for seg in segments)
+    if max_end > 0:
+        return max_end
+    return sum(max(0.0, seg.end - seg.start) for seg in segments)
+
+
+def _build_target_durations(
+    segments: Sequence[style_convert.StylizedSegment], *, desired_total: Optional[float]
+) -> tuple[list[float], float, float]:
+    original_total = _estimate_total_duration(segments)
+    target_total = desired_total or original_total
+    if original_total <= 0 or target_total <= 0:
+        scale = 1.0
+    else:
+        scale = target_total / original_total
+
+    durations: list[float] = []
+    prev_time = 0.0
+    for idx, seg in enumerate(segments):
+        next_start = segments[idx + 1].start if idx + 1 < len(segments) else seg.end
+        base = max(0.0, next_start - prev_time)
+        if base <= 0:
+            base = 0.05
+        durations.append(max(base * scale, 0.05))
+        prev_time = next_start
+    return durations, original_total, target_total
 
 
 def _collect_existing_outputs(
@@ -302,6 +336,39 @@ def _map_speakers(
         char = char1 if seg.speaker == primary else char2
         mapped.append(seg.with_character(char.id))
     return mapped
+
+
+def _retime_audio_segments(
+    audio_paths: Sequence[pathlib.Path],
+    target_durations: Sequence[float],
+    *,
+    ffmpeg_path: str,
+    env_info: EnvironmentInfo | None,
+) -> list[pathlib.Path]:
+    if len(audio_paths) != len(target_durations):
+        raise ValueError("音声ファイル数とターゲット長の数が一致しません。")
+
+    retimed: list[pathlib.Path] = []
+    for path, target in zip(audio_paths, target_durations):
+        try:
+            current = audio.read_wav_duration(path)
+        except Exception:
+            current = target
+
+        if target <= 0:
+            retimed.append(path)
+            continue
+        if abs(current - target) < 1e-3:
+            retimed.append(path)
+            continue
+
+        temp_path = path.with_name(f"{path.stem}_retimed{path.suffix}")
+        audio.time_stretch_wav(
+            path, temp_path, target_duration=target, ffmpeg_path=ffmpeg_path, env_info=env_info
+        )
+        temp_path.replace(path)
+        retimed.append(path)
+    return retimed
 
 
 def run_pipeline(config: PipelineConfig) -> None:
@@ -482,6 +549,15 @@ def run_pipeline(config: PipelineConfig) -> None:
         reporter.log("口調変換が完了し保存しました。")
     _complete_step("口調変換工程が完了しました。", step_start)
 
+    target_durations, original_total, target_total = _build_target_durations(
+        stylized, desired_total=config.output_duration
+    )
+    if target_total > 0:
+        scale = target_total / original_total if original_total > 0 else 1.0
+        reporter.log(
+            f"出力尺を調整します: 推定元尺 {original_total:.2f} 秒 -> 目標 {target_total:.2f} 秒 (倍率 {scale:.2f})"
+        )
+
     reporter.log("VOICEVOX で音声合成を実行しています...")
     step_start = reporter.now()
     synth_durations: list[float] = []
@@ -504,6 +580,13 @@ def run_pipeline(config: PipelineConfig) -> None:
         env_info=env_info,
     )
     _complete_step("VOICEVOX での合成が完了しました。", step_start)
+
+    reporter.log("セグメント長を所定の尺に合わせています...")
+    step_start = reporter.now()
+    synthesized_paths = _retime_audio_segments(
+        synthesized_paths, target_durations, ffmpeg_path=config.ffmpeg_path, env_info=env_info
+    )
+    _complete_step("セグメントの尺調整が完了しました。", step_start)
 
     if config.subtitle_mode != "off":
         reporter.log("字幕ファイルを生成しています...")
