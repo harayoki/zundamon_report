@@ -9,6 +9,8 @@ import subprocess
 import wave
 from typing import Sequence
 
+import numpy as np
+
 from .envinfo import EnvironmentInfo, append_env_details, probe_ffmpeg
 
 
@@ -90,23 +92,101 @@ def read_wav_duration(path: pathlib.Path) -> float:
     return frames / framerate
 
 
-def join_wavs(inputs: Sequence[pathlib.Path], output: pathlib.Path, *, env_info: EnvironmentInfo | None = None) -> None:
-    if not inputs:
+def _validate_wav_params(paths: Sequence[pathlib.Path], *, env_info: EnvironmentInfo | None = None) -> tuple[int, int, int]:
+    if not paths:
         raise ValueError(append_env_details("結合対象の WAV がありません。", env_info))
 
-    params = _read_params(inputs[0])
-    nchannels, sampwidth, framerate, _ = params
+    first = _read_params(paths[0])
+    for path in paths[1:]:
+        params = _read_params(path)
+        if params[:3] != first[:3]:
+            raise ValueError(append_env_details("入力 WAV のパラメーターが一致しません。結合できません。", env_info))
+    nchannels, sampwidth, framerate, _ = first
+    return nchannels, sampwidth, framerate
+
+
+def _dtype_from_sampwidth(sampwidth: int) -> np.dtype:
+    if sampwidth == 1:
+        # 8bit PCM (unsigned) を符号付きで扱い、クリッピングでサチらせる
+        return np.int8
+    if sampwidth == 2:
+        return np.dtype("<i2")
+    if sampwidth == 4:
+        return np.dtype("<i4")
+    raise ValueError(f"未対応のサンプル幅です: {sampwidth}")
+
+
+def _calc_target_starts(target_durations: Sequence[float] | None, inputs: Sequence[pathlib.Path]) -> list[float]:
+    starts: list[float] = []
+    cursor = 0.0
+    if target_durations is None:
+        for path in inputs:
+            starts.append(cursor)
+            cursor += max(0.0, read_wav_duration(path))
+    else:
+        for duration in target_durations:
+            starts.append(cursor)
+            cursor += max(0.0, duration)
+    return starts
+
+
+def join_wavs(
+    inputs: Sequence[pathlib.Path],
+    output: pathlib.Path,
+    *,
+    target_durations: Sequence[float] | None = None,
+    env_info: EnvironmentInfo | None = None,
+) -> list[tuple[float, float]]:
+    """WAV を指定したタイムラインに沿って結合する。
+
+    target_durations が与えられた場合は各セグメントの開始位置を秒単位で計算し、
+    間に無音を挿入したり、前のセグメントと重ね合わせたりしながら結合する。
+    戻り値は各セグメントの (start, end) 秒を示すタプルのリスト。
+    """
+
+    if target_durations is not None and len(inputs) != len(target_durations):
+        raise ValueError(append_env_details("音声ファイル数とターゲット長の数が一致しません。", env_info))
+
+    nchannels, sampwidth, framerate = _validate_wav_params(inputs, env_info=env_info)
+    dtype = _dtype_from_sampwidth(sampwidth)
+    max_val = np.iinfo(dtype).max
+    min_val = np.iinfo(dtype).min
+
+    starts = _calc_target_starts(target_durations, inputs)
+    buffer = np.zeros((0, nchannels), dtype=dtype)
+    placements: list[tuple[float, float]] = []
+
+    for path, start_sec in zip(inputs, starts):
+        with wave.open(str(path), "rb") as in_wf:
+            frames = in_wf.getnframes()
+            raw = in_wf.readframes(frames)
+
+        audio_data = np.frombuffer(raw, dtype=dtype)
+        if nchannels > 1:
+            audio_data = audio_data.reshape((-1, nchannels))
+        else:
+            audio_data = audio_data.reshape((-1, 1))
+
+        start_frame = max(0, int(round(start_sec * framerate)))
+        end_frame = start_frame + audio_data.shape[0]
+
+        if end_frame > buffer.shape[0]:
+            pad = np.zeros((end_frame - buffer.shape[0], nchannels), dtype=dtype)
+            buffer = np.concatenate([buffer, pad], axis=0)
+
+        existing = buffer[start_frame:end_frame].astype(np.int64)
+        mixed = existing + audio_data.astype(np.int64)
+        np.clip(mixed, min_val, max_val, out=mixed)
+        buffer[start_frame:end_frame] = mixed.astype(dtype)
+        placements.append((start_frame / framerate, end_frame / framerate))
 
     with wave.open(str(output), "wb") as out_wf:
         out_wf.setnchannels(nchannels)
         out_wf.setsampwidth(sampwidth)
         out_wf.setframerate(framerate)
-        for path in inputs:
-            p = _read_params(path)
-            if p[:3] != params[:3]:
-                raise ValueError(append_env_details("入力 WAV のパラメーターが一致しません。結合できません。", env_info))
-            with wave.open(str(path), "rb") as in_wf:
-                out_wf.writeframes(in_wf.readframes(in_wf.getnframes()))
+        out_wf.writeframes(buffer.reshape(-1).astype(dtype).tobytes())
+
+    return placements
 
 
 def convert_to_mp3(

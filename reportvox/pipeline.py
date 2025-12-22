@@ -338,39 +338,6 @@ def _map_speakers(
     return mapped
 
 
-def _retime_audio_segments(
-    audio_paths: Sequence[pathlib.Path],
-    target_durations: Sequence[float],
-    *,
-    ffmpeg_path: str,
-    env_info: EnvironmentInfo | None,
-) -> list[pathlib.Path]:
-    if len(audio_paths) != len(target_durations):
-        raise ValueError("音声ファイル数とターゲット長の数が一致しません。")
-
-    retimed: list[pathlib.Path] = []
-    for path, target in zip(audio_paths, target_durations):
-        try:
-            current = audio.read_wav_duration(path)
-        except Exception:
-            current = target
-
-        if target <= 0:
-            retimed.append(path)
-            continue
-        if abs(current - target) < 1e-3:
-            retimed.append(path)
-            continue
-
-        temp_path = path.with_name(f"{path.stem}_retimed{path.suffix}")
-        audio.time_stretch_wav(
-            path, temp_path, target_duration=target, ffmpeg_path=ffmpeg_path, env_info=env_info
-        )
-        temp_path.replace(path)
-        retimed.append(path)
-    return retimed
-
-
 def run_pipeline(config: PipelineConfig) -> None:
     reporter = _ProgressReporter()
     work_dir, out_dir = _ensure_paths()
@@ -581,17 +548,23 @@ def run_pipeline(config: PipelineConfig) -> None:
     )
     _complete_step("VOICEVOX での合成が完了しました。", step_start)
 
-    reporter.log("セグメント長を所定の尺に合わせています...")
+    reporter.log("セグメントをタイムラインに配置しています...")
     step_start = reporter.now()
-    synthesized_paths = _retime_audio_segments(
-        synthesized_paths, target_durations, ffmpeg_path=config.ffmpeg_path, env_info=env_info
+    temp_wav = run_dir / f"{output_base}.wav" if config.want_mp3 else output_wav
+    placements = audio.join_wavs(
+        synthesized_paths,
+        temp_wav,
+        target_durations=target_durations,
+        env_info=env_info,
     )
-    _complete_step("セグメントの尺調整が完了しました。", step_start)
+    _complete_step("音声の結合が完了しました。", step_start)
 
     if config.subtitle_mode != "off":
         reporter.log("字幕ファイルを生成しています...")
         step_start = reporter.now()
-        subtitle_segments = subtitles.align_segments_to_audio(stylized, synthesized_paths)
+        subtitle_segments = subtitles.align_segments_to_audio(
+            stylized, synthesized_paths, placements=placements
+        )
         subtitle_paths = subtitles.write_subtitles(
             subtitle_segments,
             out_dir=out_dir,
@@ -604,12 +577,6 @@ def run_pipeline(config: PipelineConfig) -> None:
         _complete_step("字幕ファイルの生成が完了しました。", step_start)
 
     if config.want_mp3:
-        temp_wav = run_dir / f"{output_base}.wav"
-        reporter.log(f"音声を結合しています -> {temp_wav} (mp3 用の一時ファイル)")
-        step_start = reporter.now()
-        audio.join_wavs(synthesized_paths, temp_wav, env_info=env_info)
-        _complete_step("音声の結合が完了しました。", step_start)
-
         reporter.log(f"mp3 を生成しています -> {output_mp3}")
         step_start = reporter.now()
         audio.convert_to_mp3(
@@ -623,10 +590,8 @@ def run_pipeline(config: PipelineConfig) -> None:
         if temp_wav.exists():
             temp_wav.unlink()
     else:
-        reporter.log(f"音声を結合しています -> {output_wav}")
-        step_start = reporter.now()
-        audio.join_wavs(synthesized_paths, output_wav, env_info=env_info)
-        _complete_step("音声の結合が完了しました。", step_start)
+        if not output_wav.exists():
+            temp_wav.replace(output_wav)
 
     if not config.keep_work:
         reporter.log("作業ディレクトリをクリーンアップしています...")
