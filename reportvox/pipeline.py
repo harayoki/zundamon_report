@@ -68,10 +68,12 @@ class PipelineConfig:
     mp3_bitrate: str
     ffmpeg_path: str
     keep_work: bool
+    output_name: Optional[str]
+    force_overwrite: bool
     whisper_model: str
     llm_backend: LLMBackend
     hf_token: Optional[str] = None
-    speed_scale: float = 1.0
+    speed_scale: float = 1.1
     resume_run_id: Optional[str] = None
     subtitle_mode: SubtitleMode = "off"
     subtitle_max_chars: int = 25
@@ -83,6 +85,54 @@ def _ensure_paths() -> tuple[pathlib.Path, pathlib.Path]:
     work_dir.mkdir(exist_ok=True)
     out_dir.mkdir(exist_ok=True)
     return work_dir, out_dir
+
+
+def _resolve_output_stem(config: PipelineConfig, input_path: pathlib.Path) -> str:
+    if config.output_name:
+        candidate = pathlib.Path(config.output_name).name
+        stem = pathlib.Path(candidate).stem
+        return stem or candidate
+    input_stem = (config.input_audio or input_path).stem
+    return f"{input_stem}_report"
+
+
+def _collect_existing_outputs(
+    out_dir: pathlib.Path,
+    base_name: str,
+    *,
+    want_mp3: bool,
+    subtitle_mode: SubtitleMode,
+) -> list[pathlib.Path]:
+    existing: list[pathlib.Path] = []
+    if want_mp3:
+        mp3_path = out_dir / f"{base_name}.mp3"
+        if mp3_path.exists():
+            existing.append(mp3_path)
+    else:
+        wav_path = out_dir / f"{base_name}.wav"
+        if wav_path.exists():
+            existing.append(wav_path)
+
+    if subtitle_mode == "all":
+        srt_path = out_dir / f"{base_name}.srt"
+        if srt_path.exists():
+            existing.append(srt_path)
+    elif subtitle_mode == "split":
+        for path in sorted(out_dir.glob(f"{base_name}_*.srt")):
+            if path.exists():
+                existing.append(path)
+    return existing
+
+
+def _confirm_overwrite(paths: Sequence[pathlib.Path]) -> None:
+    if not paths:
+        return
+    print("以下の出力ファイルが既に存在します。上書きしてよいですか? [y/N]")
+    for path in paths:
+        print(f"  - {path}")
+    answer = input("> ").strip().lower()
+    if answer not in {"y", "yes"}:
+        raise SystemExit("中止しました。--force で上書きします。")
 
 
 def _copy_input(input_audio: pathlib.Path, run_dir: pathlib.Path, *, env_info: EnvironmentInfo | None = None) -> pathlib.Path:
@@ -264,6 +314,18 @@ def run_pipeline(config: PipelineConfig) -> None:
         raise FileNotFoundError(append_env_details("入力ファイルが見つかりません (--resume 先に input.* が存在しません)", env_info))
     _complete_step("入力準備が完了しました。", step_start)
 
+    output_base = _resolve_output_stem(config, input_path)
+    output_wav = out_dir / f"{output_base}.wav"
+    output_mp3 = out_dir / f"{output_base}.mp3"
+    existing_outputs = _collect_existing_outputs(
+        out_dir,
+        output_base,
+        want_mp3=config.want_mp3,
+        subtitle_mode=config.subtitle_mode,
+    )
+    if existing_outputs and not config.force_overwrite:
+        _confirm_overwrite(existing_outputs)
+
     normalized_input = run_dir / "input.wav"
     step_start = reporter.now()
     if resume and normalized_input.exists():
@@ -334,8 +396,6 @@ def run_pipeline(config: PipelineConfig) -> None:
         reporter.log("口調変換が完了し保存しました。")
     _complete_step("口調変換工程が完了しました。", step_start)
 
-    base_stem = (config.input_audio or input_path).stem
-
     reporter.log("VOICEVOX で音声合成を実行しています...")
     step_start = reporter.now()
     synth_durations: list[float] = []
@@ -366,7 +426,7 @@ def run_pipeline(config: PipelineConfig) -> None:
         subtitle_paths = subtitles.write_subtitles(
             subtitle_segments,
             out_dir=out_dir,
-            base_stem=base_stem,
+            base_stem=output_base,
             mode=config.subtitle_mode,
             characters={char1.id: char1, char2.id: char2},
             max_chars_per_line=config.subtitle_max_chars,
@@ -374,30 +434,38 @@ def run_pipeline(config: PipelineConfig) -> None:
         reporter.log(f"字幕を出力しました: {[p.name for p in subtitle_paths]}")
         _complete_step("字幕ファイルの生成が完了しました。", step_start)
 
-    output_wav = out_dir / f"{base_stem}_report.wav"
-    reporter.log(f"音声を結合しています -> {output_wav}")
-    step_start = reporter.now()
-    audio.join_wavs(synthesized_paths, output_wav, env_info=env_info)
-    _complete_step("音声の結合が完了しました。", step_start)
-
     if config.want_mp3:
-        mp3_path = out_dir / f"{base_stem}_report.mp3"
-        reporter.log(f"mp3 を生成しています -> {mp3_path}")
+        temp_wav = run_dir / f"{output_base}.wav"
+        reporter.log(f"音声を結合しています -> {temp_wav} (mp3 用の一時ファイル)")
+        step_start = reporter.now()
+        audio.join_wavs(synthesized_paths, temp_wav, env_info=env_info)
+        _complete_step("音声の結合が完了しました。", step_start)
+
+        reporter.log(f"mp3 を生成しています -> {output_mp3}")
         step_start = reporter.now()
         audio.convert_to_mp3(
-            output_wav,
-            mp3_path,
+            temp_wav,
+            output_mp3,
             bitrate=config.mp3_bitrate,
             ffmpeg_path=config.ffmpeg_path,
             env_info=env_info,
         )
         _complete_step("mp3 生成が完了しました。", step_start)
+        if temp_wav.exists():
+            temp_wav.unlink()
+    else:
+        reporter.log(f"音声を結合しています -> {output_wav}")
+        step_start = reporter.now()
+        audio.join_wavs(synthesized_paths, output_wav, env_info=env_info)
+        _complete_step("音声の結合が完了しました。", step_start)
 
     if not config.keep_work:
         reporter.log("作業ディレクトリをクリーンアップしています...")
         step_start = reporter.now()
         shutil.rmtree(run_dir, ignore_errors=True)
         _complete_step("作業ディレクトリを削除しました。", step_start)
+    else:
+        reporter.log(f"作業ディレクトリを保持します -> {run_dir}")
 
     reporter.log("すべての処理が完了しました。")
 

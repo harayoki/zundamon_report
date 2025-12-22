@@ -37,53 +37,67 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "input",
         nargs="?",
-        help="入力となる音声/動画ファイルのパス（音声トラック必須）。--resume 指定がない場合は必須。",
+        help="入力となる音声/動画ファイルのパス（音声トラック必須）。--resume を使わない場合は必須。",
     )
-    parser.add_argument("--voicevox-url", default="http://127.0.0.1:50021", help="VOICEVOX Engine のベースURL。")
+    parser.add_argument(
+        "--voicevox-url",
+        default="http://127.0.0.1:50021",
+        help="VOICEVOX Engine のベースURL（例: http://127.0.0.1:50021）。",
+    )
     parser.add_argument(
         "--speakers",
         choices=["auto", "1", "2"],
         default="auto",
-        help="話者数の扱い: 自動判定/1人固定/2人固定。",
+        help="話者数の扱い: auto=自動判定 / 1=単一話者として処理 / 2=2人固定（pyannote 認証が必要）。",
     )
-    parser.add_argument("--speaker1", default="zundamon", help="主話者に割り当てるキャラクターID。")
-    parser.add_argument("--speaker2", default="metan", help="副話者に割り当てるキャラクターID。")
-    parser.add_argument("--zunda-senior-job", dest="zunda_senior_job", default=None, help="ずんだもんが憧れる職業を指定。")
-    parser.add_argument("--zunda-junior-job", dest="zunda_junior_job", default=None, help="ずんだもんの現在の役割を指定。")
-    parser.add_argument("--mp3", action="store_true", help="ffmpeg が利用可能な場合に mp3 も生成。")
-    parser.add_argument("--bitrate", default="192k", help="mp3 出力時のビットレート。")
-    parser.add_argument("--ffmpeg-path", default="ffmpeg", help="ffmpeg 実行ファイルへのパス。")
-    parser.add_argument("--keep-work", action="store_true", help="work/ 以下の中間ファイルを削除せず残す。")
-    parser.add_argument("--model", default="small", help="利用する Whisper モデルサイズ。")
-    parser.add_argument("--speed-scale", type=_positive_float, default=1.0, help="VOICEVOX の speedScale を指定。")
+    parser.add_argument("--speaker1", default="zundamon", help="主話者に割り当てるキャラクターID（characters/ 以下のID）。")
+    parser.add_argument("--speaker2", default="metan", help="副話者に割り当てるキャラクターID（characters/ 以下のID）。")
+    parser.add_argument(
+        "--zunda-senior-job", dest="zunda_senior_job", default=None, help="ずんだもんが憧れる職業を指定（--zunda-junior-job と併用）。"
+    )
+    parser.add_argument(
+        "--zunda-junior-job", dest="zunda_junior_job", default=None, help="ずんだもんの現在の役割を指定（--zunda-senior-job と併用）。"
+    )
+    parser.add_argument("--mp3", action="store_true", help="mp3 を生成（out/ には mp3 だけを出力）。")
+    parser.add_argument("--bitrate", default="192k", help="mp3 出力時のビットレート（--mp3 使用時のみ）。")
+    parser.add_argument("--ffmpeg-path", default="ffmpeg", help="ffmpeg 実行ファイルへのパス（コマンド名またはフルパス）。")
+    parser.add_argument(
+        "--output-name",
+        default=None,
+        help="出力ファイル名のベース（拡張子不要）。例: --output-name demo => out/demo.wav|mp3|srt",
+    )
+    parser.add_argument("-f", "--force", action="store_true", help="既存の出力があっても確認せず上書きする。")
+    parser.add_argument("--keep-work", action="store_true", help="work/ 以下の中間ファイルを削除せず残す（開発/再出力向け）。")
+    parser.add_argument("--model", default="small", help="利用する Whisper モデルサイズ（tiny/base/small/medium/large）。")
+    parser.add_argument("--speed-scale", type=_positive_float, default=1.1, help="VOICEVOX の speedScale を指定（デフォルト 1.1）。")
     parser.add_argument(
         "--resume",
         dest="resume_run_id",
         default=None,
-        help="既存の work/<run_id> ディレクトリから処理を再開する。",
+        help="既存の work/<run_id> ディレクトリから処理を再開する（入力コピーや途中結果を再利用）。",
     )
     parser.add_argument(
         "--llm",
         choices=["none", "openai", "local"],
         default="none",
-        help="口調変換に使う LLM バックエンド。",
+        help="口調変換に使う LLM バックエンド（none は変換なし）。",
     )
     parser.add_argument(
         "--hf-token",
         default=None,
-        help="pyannote.audio 用の Hugging Face Token（環境変数 PYANNOTE_TOKEN も参照）。",
+        help="pyannote.audio 用の Hugging Face Token（auto/2 人話者分離時に必要、環境変数 PYANNOTE_TOKEN も参照）。",
     )
     parser.add_argument(
         "--subtitles",
         choices=["off", "all", "split"],
         default="off",
-        help="字幕データの出力モード: off で生成なし / all ですべての発話を1ファイルに / split で話者ごとに別ファイルへ保存。",
+        help="字幕データの出力モード: off=生成なし / all=すべての発話を1ファイル / split=話者ごとに別ファイル。",
     )
     parser.add_argument(
         "--subtitle-max-chars",
         type=_positive_int,
         default=25,
-        help="字幕1枚あたりの最大文字数。0 で制限なし。デフォルトは 25 で、細かく切り替わる字幕を生成します。",
+        help="字幕1枚あたりの最大文字数。0 で制限なし。デフォルトは 25。",
     )
     return parser
 
@@ -108,6 +122,8 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
         mp3_bitrate=args.bitrate,
         ffmpeg_path=args.ffmpeg_path,
         keep_work=args.keep_work,
+        output_name=args.output_name,
+        force_overwrite=args.force,
         whisper_model=args.model,
         llm_backend=args.llm,
         hf_token=args.hf_token,

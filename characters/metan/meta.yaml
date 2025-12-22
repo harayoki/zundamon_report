@@ -7,6 +7,6 @@ style:
   endings: ["するわ", "ね", "かしら"]
   role: ツッコミ役
 phrases:
-  idea_intro: ["ここからはわたしが説明するわ"]
+  idea_intro: ["ここからは私、めたんが説明するわ"]
   explanation_start: ["要するにこういうことね"]
   conclusion: ["それで決まりね"]

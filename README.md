@@ -60,6 +60,15 @@ python -m reportvox input.wav --speakers 2 --speaker1 zundamon --speaker2 metan
 # 中断したワークフローを再開（work/<run_id> を指定）
 python -m reportvox input.wav --resume 20240101-120000
 
+# work/<run_id> を残して設定変更や再出力に使う（開発用）
+python -m reportvox input.wav --keep-work
+
+# 出力ファイル名を指定（mp3/字幕にも同名を適用）
+python -m reportvox input.wav --output-name meeting_2024
+
+# 既存の出力がある場合も確認せず上書き
+python -m reportvox input.wav -f
+
 # 字幕 (SRT) を同時出力
 python -m reportvox input.wav --subtitles all  # 2話者を1つのファイルにまとめて出力
 python -m reportvox input.wav --subtitles split  # 話者ごとに別ファイルを出力
@@ -73,7 +82,12 @@ python -m reportvox input.mp4 --speakers auto --mp3
 - --model: Whisper のモデルサイズ。
 - --voicevox-url: VOICEVOX Engine のベース URL。
 - --speed-scale: VOICEVOX での読み上げ速度（デフォルト 1.0）。
+- --output-name: 出力ファイル名のベース（拡張子不要）。mp3/字幕にも同名を適用。
+- -f, --force: 出力の上書き確認をスキップ。
+- --mp3: mp3 を生成（out/ には mp3 だけを出力）。
+- --bitrate: mp3 出力時のビットレート。
 - --resume <run_id>: 中断した工程から再開。
+- --keep-work: work/<run_id> を削除せず保持（開発/再出力向け）。
 - --hf-token: Hugging Face Token。
 - --subtitles {off,all,split}: SRT 字幕の出力モード。off で出力なし、all ですべての発話をまとめた 1 ファイル、split で話者ごとに別ファイル。
 - --subtitle-max-chars: 字幕1枚あたりの最大文字数（デフォルト 25、0 で無制限）。
