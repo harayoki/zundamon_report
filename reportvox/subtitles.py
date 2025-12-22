@@ -82,7 +82,7 @@ def _split_text(text: str, include_label: bool, *, max_chars: int | None = None)
         candidate = remaining[:limit]
         split_at = max((candidate.rfind(p) for p in "。！？\n"), default=-1)
         if split_at <= 0:
-            split_at = limit
+            split_at = max(1, min(limit - 1, len(candidate) // 2))
         chunk_body = candidate[: split_at + 1].strip()
         remaining = remaining[split_at + 1 :].lstrip()
         if is_first and prefix:
