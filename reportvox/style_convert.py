@@ -8,7 +8,8 @@ from typing import Iterable, List, Optional, Sequence
 
 from .diarize import AlignedSegment
 from .characters import CharacterMeta
-from .llm_client import LLMBackend, chat_completion
+from .config import LLMBackend # <-- 追加
+from .llm_client import chat_completion # <-- 修正
 
 
 @dataclass

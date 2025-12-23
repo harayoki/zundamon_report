@@ -7,9 +7,8 @@ from typing import Literal
 
 import httpx
 
+from .config import LLMBackend # <-- 修正
 from .envinfo import EnvironmentInfo, append_env_details
-
-LLMBackend = Literal["none", "openai", "local"]
 
 
 def chat_completion(

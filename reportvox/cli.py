@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import argparse
 import pathlib
+import sys
 from typing import Sequence
 
-from .pipeline import PipelineConfig, run_pipeline
+from reportvox.config import PipelineConfig
+from reportvox.pipeline import run_pipeline
 
 
 def _positive_float(value: str) -> float:
@@ -115,6 +117,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="文字起こし保存後に LLM で明らかな誤字脱字を校正してから次の工程へ進みます (--llm でバックエンド指定)。",
     )
+    parser.add_argument(
+        "--resume-from",
+        dest="resume_from",
+        default=None,
+        help="指定したステップから処理を再開する（--resume と併用）。ステップ名または1から始まる番号で指定。",
+    )
     return parser
 
 
@@ -124,6 +132,9 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
 
     if args.input is None and args.resume_run_id is None:
         parser.error("--resume を指定しない場合は入力ファイルが必要です。")
+
+    if args.resume_run_id is None and args.resume_from is not None:
+        parser.error("--resume-from は --resume と一緒に使用する必要があります。")
 
     if args.review_transcript and args.review_transcript_llm:
         parser.error("--review-transcript と --review-transcript-llm は同時に指定できません。")
@@ -154,6 +165,7 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
         speed_scale=args.speed_scale,
         output_duration=args.duration,
         resume_run_id=args.resume_run_id,
+        resume_from=args.resume_from,
         subtitle_mode=args.subtitles,
         subtitle_max_chars=args.subtitle_max_chars,
         review_transcript=review_mode,
@@ -162,4 +174,12 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
 
 def main(argv: Sequence[str] | None = None) -> None:
     config = parse_args(argv)
-    run_pipeline(config)
+    try:
+        run_pipeline(config)
+    except (FileNotFoundError, RuntimeError) as e:
+        # envinfo が詳細を追記してくれるのでそのまま出す
+        print(f"エラー: {e}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"予期せぬエラーが発生しました: {e}", file=sys.stderr)
+        sys.exit(1)

@@ -5,3 +5,4 @@ work/
 out/
 temp/
 .DS_Store
+*.log

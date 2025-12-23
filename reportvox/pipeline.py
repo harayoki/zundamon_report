@@ -1,4 +1,4 @@
-"""処理パイプラインのオーケストレーション。"""
+"処理パイプラインのオーケストレーション。"
 
 from __future__ import annotations
 
@@ -9,16 +9,12 @@ import shutil
 import sys
 import time
 from dataclasses import dataclass
-from typing import Dict, Literal, Optional, Sequence
+from typing import Callable, Dict, List, Optional, Sequence
 
 from . import diarize, transcribe, style_convert, voicevox, audio, characters, subtitles
+from .config import LLMBackend, PipelineConfig, SpeakerMode, SubtitleMode, TranscriptReviewMode
 from .envinfo import EnvironmentInfo, append_env_details
-from .llm_client import LLMBackend, chat_completion
-
-
-SpeakerMode = Literal["auto", "1", "2"]
-SubtitleMode = Literal["off", "all", "split"]
-TranscriptReviewMode = Literal["off", "manual", "llm"]
+from .llm_client import chat_completion
 
 
 class _ProgressReporter:
@@ -54,64 +50,6 @@ def _estimate_remaining(total_steps: int, steps_done: int, elapsed: float) -> fl
         return None
     avg = elapsed / steps_done
     return avg * (total_steps - steps_done)
-
-
-def _build_resume_command(config: PipelineConfig, run_id: str) -> str:
-    parts: list[str] = ["python -m reportvox", f"--resume {run_id}"]
-    parts.append(f"--voicevox-url {config.voicevox_url}")
-    parts.append(f"--speakers {config.speakers}")
-    parts.append(f"--speaker1 {config.speaker1}")
-    parts.append(f"--speaker2 {config.speaker2}")
-    if config.zunda_senior_job:
-        parts.append(f"--zunda-senior-job {config.zunda_senior_job}")
-    if config.zunda_junior_job:
-        parts.append(f"--zunda-junior-job {config.zunda_junior_job}")
-    parts.append(f"--ffmpeg-path {config.ffmpeg_path}")
-    parts.append(f"--model {config.whisper_model}")
-    parts.append(f"--llm {config.llm_backend}")
-    if config.speed_scale != 1.0:
-        parts.append(f"--speed-scale {config.speed_scale}")
-    if config.output_duration:
-        parts.append(f"--duration {config.output_duration}")
-    if config.subtitle_mode != "off":
-        parts.append(f"--subtitles {config.subtitle_mode}")
-        parts.append(f"--subtitle-max-chars {config.subtitle_max_chars}")
-    if config.want_mp3:
-        parts.append("--mp3")
-        parts.append(f"--bitrate {config.mp3_bitrate}")
-    if config.keep_work:
-        parts.append("--keep-work")
-    if config.review_transcript == "manual":
-        parts.append("--review-transcript")
-    elif config.review_transcript == "llm":
-        parts.append("--review-transcript-llm")
-    return " ".join(parts)
-
-
-@dataclass
-class PipelineConfig:
-    input_audio: pathlib.Path | None
-    voicevox_url: str
-    speakers: SpeakerMode
-    speaker1: str
-    speaker2: str
-    zunda_senior_job: Optional[str]
-    zunda_junior_job: Optional[str]
-    want_mp3: bool
-    mp3_bitrate: str
-    ffmpeg_path: str
-    keep_work: bool
-    output_name: Optional[str]
-    force_overwrite: bool
-    whisper_model: str
-    llm_backend: LLMBackend
-    hf_token: Optional[str] = None
-    speed_scale: float = 1.1
-    output_duration: Optional[float] = None
-    resume_run_id: Optional[str] = None
-    subtitle_mode: SubtitleMode = "off"
-    subtitle_max_chars: int = 25
-    review_transcript: TranscriptReviewMode = "off"
 
 
 def _ensure_paths() -> tuple[pathlib.Path, pathlib.Path]:
@@ -163,7 +101,7 @@ def _build_target_durations(
 def _collect_existing_outputs(
     out_dir: pathlib.Path,
     base_name: str,
-    *,
+    *, 
     want_mp3: bool,
     subtitle_mode: SubtitleMode,
 ) -> list[pathlib.Path]:
@@ -336,69 +274,54 @@ def _map_speakers(
     return mapped
 
 
-def run_pipeline(config: PipelineConfig) -> None:
-    reporter = _ProgressReporter()
-    work_dir, out_dir = _ensure_paths()
+@dataclass
+class PipelineState:
+    """パイプラインの実行状態を管理する。"""
+
+    config: PipelineConfig
+    reporter: _ProgressReporter
+    run_id: str
+    run_dir: pathlib.Path
+    out_dir: pathlib.Path
+    env_info: EnvironmentInfo
+    steps_done: int = 0
+    total_steps: int = 0
+    # Step outputs
+    normalized_input_path: Optional[pathlib.Path] = None
+    output_base_name: Optional[str] = None
+    transcription_result: Optional[transcribe.TranscriptionResult] = None
+    diarization_result: Optional[list[diarize.DiarizedSegment]] = None
+    stylized_segments: Optional[list[style_convert.StylizedSegment]] = None
+    synthesized_paths: Optional[list[pathlib.Path]] = None
+    placements: Optional[list[dict]] = None
+
+    def complete_step(self, message: str, start_time: float) -> None:
+        """ステップ完了を報告し、進捗を更新する。"""
+        duration = self.reporter.now() - start_time
+        self.steps_done += 1
+        remaining = _estimate_remaining(self.total_steps, self.steps_done, self.reporter.elapsed())
+        self.reporter.log(message, step_duration=duration, remaining=remaining)
+
+
+def _step_prepare_input(state: PipelineState) -> None:
+    """入力ファイルの準備、正規化、上書き確認などを行う。"""
+    if state.normalized_input_path and (state.run_dir / "input.wav").exists():
+        return
+
+    config = state.config
+    reporter = state.reporter
+    run_dir = state.run_dir
+    out_dir = state.out_dir
+    env_info = state.env_info
     resume = config.resume_run_id is not None
-    run_id = config.resume_run_id or time.strftime("%Y%m%d-%H%M%S")
-    run_dir = work_dir / run_id
-    env_info = EnvironmentInfo.collect(config.ffmpeg_path, config.hf_token, os.environ.get("PYANNOTE_TOKEN"))
-
-    if not resume:
-        # 同じ秒に実行開始した際の run_id 競合を避ける
-        suffix = 1
-        base_id = run_id
-        while run_dir.exists():
-            run_id = f"{base_id}-{suffix}"
-            run_dir = work_dir / run_id
-            suffix += 1
-
-    if resume:
-        if not run_dir.exists():
-            raise FileNotFoundError(append_env_details(f"指定された run_id が見つかりませんでした: {run_id}", env_info))
-        reporter.log(f"run_id {run_id} で再開します。")
-    else:
-        run_dir.mkdir(parents=True, exist_ok=True)
-
-    hf_token = config.hf_token or os.environ.get("PYANNOTE_TOKEN")
-    diarization_path = run_dir / "diarization.json"
-    need_new_diarization = config.speakers != "1" and not (resume and diarization_path.exists())
-    if need_new_diarization and hf_token is None:
-        raise RuntimeError(
-            append_env_details(
-                "pyannote の話者分離には Hugging Face Token が必要ですが、--hf-token と PYANNOTE_TOKEN のいずれも指定されていません。\n"
-                f"{diarize._PYANNOTE_ACCESS_STEPS}\n{diarize._PYANNOTE_TOKEN_USAGE}",
-                env_info,
-            )
-        )
-
-    total_steps = 4  # ffmpeg 確認、入力コピー、正規化、文字起こし
-    total_steps += 1  # 話者分離の読み込み/実行
-    total_steps += 1  # 口調変換
-    if config.subtitle_mode != "off":
-        total_steps += 1  # 字幕生成
-    total_steps += 1  # VOICEVOX 合成
-    total_steps += 1  # WAV 結合
-    if config.want_mp3:
-        total_steps += 1
-    if not config.keep_work:
-        total_steps += 1
-    steps_done = 0
-
-    def _complete_step(message: str, start_time: float) -> None:
-        nonlocal steps_done
-        duration = reporter.now() - start_time
-        steps_done += 1
-        remaining = _estimate_remaining(total_steps, steps_done, reporter.elapsed())
-        reporter.log(message, step_duration=duration, remaining=remaining)
 
     reporter.log("ffmpeg の利用可否を確認しています...")
     step_start = reporter.now()
     resolved_ffmpeg = audio.ensure_ffmpeg(config.ffmpeg_path, env_info=env_info)
     config.ffmpeg_path = resolved_ffmpeg
-    _complete_step("ffmpeg の確認が完了しました。", step_start)
+    state.complete_step("ffmpeg の確認が完了しました。", step_start)
 
-    reporter.log(f"run_id: {run_id}")
+    reporter.log(f"run_id: {state.run_id}")
     if not resume and config.input_audio is None:
         raise ValueError(append_env_details("再開しない場合は input_audio が必須です。", env_info))
 
@@ -413,11 +336,11 @@ def run_pipeline(config: PipelineConfig) -> None:
         reporter.log(f"入力をコピーしました -> {input_path.name}")
     else:
         raise FileNotFoundError(append_env_details("入力ファイルが見つかりません (--resume 先に input.* が存在しません)", env_info))
-    _complete_step("入力準備が完了しました。", step_start)
+    state.complete_step("入力準備が完了しました。", step_start)
 
     output_base = _resolve_output_stem(config, input_path)
-    output_wav = out_dir / f"{output_base}.wav"
-    output_mp3 = out_dir / f"{output_base}.mp3"
+    state.output_base_name = output_base
+
     existing_outputs = _collect_existing_outputs(
         out_dir,
         output_base,
@@ -433,7 +356,23 @@ def run_pipeline(config: PipelineConfig) -> None:
         reporter.log("既存の正規化済み WAV を利用します。")
     else:
         audio.normalize_to_wav(input_path, normalized_input, ffmpeg_path=config.ffmpeg_path, env_info=env_info)
-    _complete_step("WAV 正規化が完了しました。", step_start)
+    state.complete_step("WAV 正規化が完了しました。", step_start)
+    state.normalized_input_path = normalized_input
+
+
+def _step_transcribe(state: PipelineState) -> None:
+    """Whisper で文字起こしを行う。"""
+    if state.transcription_result:
+        return
+    if not (state.run_dir / "transcript.json").exists():
+        state.reporter.log("文字起こし結果が見つからないため、文字起こしステップから実行します。")
+        _step_prepare_input(state)
+
+    config = state.config
+    reporter = state.reporter
+    run_dir = state.run_dir
+    env_info = state.env_info
+    resume = config.resume_run_id is not None
 
     transcript_path = run_dir / "transcript.json"
     step_start = reporter.now()
@@ -443,15 +382,14 @@ def run_pipeline(config: PipelineConfig) -> None:
     else:
         reporter.log(f"Whisper ({config.whisper_model}) で文字起こし中です... この処理は数分かかる場合があります。")
         whisper_result = transcribe.transcribe_audio(
-            normalized_input, model_size=config.whisper_model, env_info=env_info
+            state.normalized_input_path, model_size=config.whisper_model, env_info=env_info
         )
         transcript_path.write_text(json.dumps(whisper_result.as_json(), ensure_ascii=False, indent=2), encoding="utf-8")
         reporter.log("文字起こしが完了し保存しました。")
         if config.review_transcript == "manual":
-            resume_cmd = _build_resume_command(config, run_id)
             reporter.log("transcript.json を開いて明らかな誤字脱字を修正できます。修正後、次のコマンドで再開してください。")
-            reporter.log(resume_cmd)
-            return
+            reporter.log(f"python -m reportvox --resume {state.run_id}")
+            raise SystemExit(0)
         elif config.review_transcript == "llm":
             reporter.log("LLM で文字起こしを校正しています...")
             try:
@@ -464,8 +402,26 @@ def run_pipeline(config: PipelineConfig) -> None:
                 reporter.log("LLM による校正を完了し、transcript.json を更新しました。")
             except Exception as exc:
                 reporter.log(f"LLM 校正に失敗したため、元の文字起こしで続行します: {exc}")
-    _complete_step("文字起こし工程が完了しました。", step_start)
+    state.complete_step("文字起こし工程が完了しました。", step_start)
+    state.transcription_result = whisper_result
 
+
+def _step_diarize(state: PipelineState) -> None:
+    """pyannote で話者分離を行う。"""
+    if state.diarization_result:
+        return
+    if not (state.run_dir / "diarization.json").exists():
+        state.reporter.log("話者分離結果が見つからないため、話者分離ステップから実行します。")
+        _step_prepare_input(state)
+
+    config = state.config
+    reporter = state.reporter
+    run_dir = state.run_dir
+    env_info = state.env_info
+    resume = config.resume_run_id is not None
+
+    hf_token = config.hf_token or os.environ.get("PYANNOTE_TOKEN")
+    diarization_path = run_dir / "diarization.json"
     step_start = reporter.now()
     if resume and diarization_path.exists():
         reporter.log(f"既存の話者分離結果を読み込みます ({config.speakers})...")
@@ -474,7 +430,7 @@ def run_pipeline(config: PipelineConfig) -> None:
         reporter.log(f"話者分離を実行しています ({config.speakers})...")
         with diarize.torchcodec_warning_detector() as torchcodec_warning:
             diarization = diarize.diarize_audio(
-                normalized_input,
+                state.normalized_input_path,
                 mode=config.speakers,
                 hf_token=hf_token,
                 work_dir=run_dir,
@@ -486,8 +442,26 @@ def run_pipeline(config: PipelineConfig) -> None:
                 " 警告だけならそのまま続行しても構いませんが、話者分離に失敗する場合は README の TorchCodec 対処を確認してください。"
             )
         diarize.save_diarization(diarization, diarization_path)
-    _complete_step("話者分離工程が完了しました。", step_start)
+    state.complete_step("話者分離工程が完了しました。", step_start)
+    state.diarization_result = diarization
 
+
+def _step_stylize(state: PipelineState) -> None:
+    """口調変換と定型句の挿入を行う。"""
+    if state.stylized_segments:
+        return
+    if not (state.run_dir / "stylized.json").exists():
+        state.reporter.log("口調変換済みセグメントが見つからないため、口調変換ステップから実行します。")
+        _step_transcribe(state)
+        _step_diarize(state)
+
+    config = state.config
+    reporter = state.reporter
+    run_dir = state.run_dir
+    resume = config.resume_run_id is not None
+
+    whisper_result = state.transcription_result
+    diarization = state.diarization_result
     aligned = diarize.align_segments(whisper_result.segments, diarization)
     totals = _summarize_speaker_durations(aligned)
     reporter.log(f"話者ごとの発話時間: {totals}")
@@ -512,16 +486,25 @@ def run_pipeline(config: PipelineConfig) -> None:
         )
         _save_stylized(stylized, stylized_path)
         reporter.log("口調変換が完了し保存しました。")
-    _complete_step("口調変換工程が完了しました。", step_start)
+    state.complete_step("口調変換工程が完了しました。", step_start)
+    state.stylized_segments = stylized
 
-    target_durations, original_total, target_total = _build_target_durations(
-        stylized, desired_total=config.output_duration
-    )
-    if target_total > 0:
-        scale = target_total / original_total if original_total > 0 else 1.0
-        reporter.log(
-            f"出力尺を調整します: 推定元尺 {original_total:.2f} 秒 -> 目標 {target_total:.2f} 秒 (倍率 {scale:.2f})"
-        )
+
+def _step_synthesize(state: PipelineState) -> None:
+    """VOICEVOX で音声合成を実行する。"""
+    # このステップは再開時に既存ファイルを使うロジックが既にあるため、依存関係チェックのみ
+    if state.stylized_segments is None:
+        state.reporter.log("口調変換済みセグメントが見つからないため、口調変換ステップから実行します。")
+        _step_stylize(state)
+
+    config = state.config
+    reporter = state.reporter
+    run_dir = state.run_dir
+    resume = config.resume_run_id is not None
+    env_info = state.env_info
+
+    char1 = characters.load_character(config.speaker1)
+    char2 = characters.load_character(config.speaker2)
 
     reporter.log("VOICEVOX で音声合成を実行しています...")
     step_start = reporter.now()
@@ -535,7 +518,7 @@ def run_pipeline(config: PipelineConfig) -> None:
         reporter.log(f"VOICEVOX 合成 {done}/{total} セグメント完了。", step_duration=duration, remaining=remaining_time)
 
     synthesized_paths = voicevox.synthesize_segments(
-        stylized,
+        state.stylized_segments,
         characters={char1.id: char1, char2.id: char2},
         base_url=config.voicevox_url,
         run_dir=run_dir,
@@ -544,35 +527,77 @@ def run_pipeline(config: PipelineConfig) -> None:
         progress=_synth_progress,
         env_info=env_info,
     )
-    _complete_step("VOICEVOX での合成が完了しました。", step_start)
+    state.complete_step("VOICEVOX での合成が完了しました。", step_start)
+    state.synthesized_paths = synthesized_paths
+
+
+def _step_concatenate(state: PipelineState) -> None:
+    """合成された WAV をタイムラインに配置して結合する。"""
+    if state.placements:
+        return
+    if state.synthesized_paths is None:
+        state.reporter.log("合成済み音声が見つからないため、音声合成ステップから実行します。")
+        _step_synthesize(state)
+
+    config = state.config
+    reporter = state.reporter
+    run_dir = state.run_dir
+    out_dir = state.out_dir
+    env_info = state.env_info
+
+    target_durations, _, _ = _build_target_durations(
+        state.stylized_segments, desired_total=config.output_duration
+    )
 
     reporter.log("セグメントをタイムラインに配置しています...")
     step_start = reporter.now()
-    temp_wav = run_dir / f"{output_base}.wav" if config.want_mp3 else output_wav
+    output_wav = out_dir / f"{state.output_base_name}.wav"
+    temp_wav = run_dir / f"{state.output_base_name}.wav" if config.want_mp3 else output_wav
     placements = audio.join_wavs(
-        synthesized_paths,
+        state.synthesized_paths,
         temp_wav,
         target_durations=target_durations,
         env_info=env_info,
     )
-    _complete_step("音声の結合が完了しました。", step_start)
+    state.complete_step("音声の結合が完了しました。", step_start)
+    state.placements = placements
+
+
+def _step_finalize(state: PipelineState) -> None:
+    """字幕生成、mp3 化、作業ディレクトリのクリーンアップなどを行う。"""
+    if state.placements is None:
+        state.reporter.log("配置情報が見つからないため、音声結合ステップから実行します。")
+        _step_concatenate(state)
+
+    config = state.config
+    reporter = state.reporter
+    run_dir = state.run_dir
+    out_dir = state.out_dir
+    env_info = state.env_info
+
+    char1 = characters.load_character(config.speaker1)
+    char2 = characters.load_character(config.speaker2)
 
     if config.subtitle_mode != "off":
         reporter.log("字幕ファイルを生成しています...")
         step_start = reporter.now()
         subtitle_segments = subtitles.align_segments_to_audio(
-            stylized, synthesized_paths, placements=placements
+            state.stylized_segments, state.synthesized_paths, placements=state.placements
         )
         subtitle_paths = subtitles.write_subtitles(
             subtitle_segments,
             out_dir=out_dir,
-            base_stem=output_base,
+            base_stem=state.output_base_name,
             mode=config.subtitle_mode,
             characters={char1.id: char1, char2.id: char2},
             max_chars_per_line=config.subtitle_max_chars,
         )
         reporter.log(f"字幕を出力しました: {[p.name for p in subtitle_paths]}")
-        _complete_step("字幕ファイルの生成が完了しました。", step_start)
+        state.complete_step("字幕ファイルの生成が完了しました。", step_start)
+
+    output_wav = out_dir / f"{state.output_base_name}.wav"
+    output_mp3 = out_dir / f"{state.output_base_name}.mp3"
+    temp_wav = run_dir / f"{state.output_base_name}.wav" if config.want_mp3 else output_wav
 
     if config.want_mp3:
         reporter.log(f"mp3 を生成しています -> {output_mp3}")
@@ -584,7 +609,7 @@ def run_pipeline(config: PipelineConfig) -> None:
             ffmpeg_path=config.ffmpeg_path,
             env_info=env_info,
         )
-        _complete_step("mp3 生成が完了しました。", step_start)
+        state.complete_step("mp3 生成が完了しました。", step_start)
         if temp_wav.exists():
             temp_wav.unlink()
     else:
@@ -595,11 +620,100 @@ def run_pipeline(config: PipelineConfig) -> None:
         reporter.log("作業ディレクトリをクリーンアップしています...")
         step_start = reporter.now()
         shutil.rmtree(run_dir, ignore_errors=True)
-        _complete_step("作業ディレクトリを削除しました。", step_start)
+        state.complete_step("作業ディレクトリを削除しました。", step_start)
     else:
         reporter.log(f"作業ディレクトリを保持します -> {run_dir}")
 
-    reporter.log("すべての処理が完了しました。")
+
+
+_PIPELINE_STEPS: list[Callable[[PipelineState], None]] = [
+    _step_prepare_input,
+    _step_transcribe,
+    _step_diarize,
+    _step_stylize,
+    _step_synthesize,
+    _step_concatenate,
+    _step_finalize,
+]
+
+
+def run_pipeline(config: PipelineConfig) -> None:
+    reporter = _ProgressReporter()
+    work_dir, out_dir = _ensure_paths()
+    resume = config.resume_run_id is not None
+    run_id = config.resume_run_id or time.strftime("%Y%m%d-%H%M%S")
+    run_dir = work_dir / run_id
+
+    if not resume:
+        # 同じ秒に実行開始した際の run_id 競合を避ける
+        suffix = 1
+        base_id = run_id
+        while run_dir.exists():
+            run_id = f"{base_id}-{suffix}"
+            run_dir = work_dir / run_id
+            suffix += 1
+
+    if resume:
+        if not run_dir.exists():
+            raise FileNotFoundError(f"指定された run_id が見つかりませんでした: {run_id}")
+        reporter.log(f"run_id {run_id} で再開します。")
+    else:
+        run_dir.mkdir(parents=True, exist_ok=True)
+
+    state = PipelineState(
+        config=config,
+        reporter=reporter,
+        run_id=run_id,
+        run_dir=run_dir,
+        out_dir=out_dir,
+        env_info=EnvironmentInfo.collect(config.ffmpeg_path, config.hf_token, os.environ.get("PYANNOTE_TOKEN")),
+    )
+
+    hf_token = config.hf_token or os.environ.get("PYANNOTE_TOKEN")
+    diarization_path = run_dir / "diarization.json"
+    need_new_diarization = config.speakers != "1" and not (resume and diarization_path.exists())
+    if need_new_diarization and hf_token is None:
+        raise RuntimeError(
+            append_env_details(
+                "pyannote の話者分離には Hugging Face Token が必要ですが、--hf-token と PYANNOTE_TOKEN のいずれも指定されていません。\n"
+                f"{diarize._PYANNOTE_ACCESS_STEPS}\n{diarize._PYANNOTE_TOKEN_USAGE}",
+                state.env_info,
+            )
+        )
+
+    state.total_steps = len(_PIPELINE_STEPS)
+
+    _run_pipeline_steps(state)
+
+
+def _run_pipeline_steps(state: PipelineState) -> None:
+    """パイプラインの各ステップを実行する。"""
+
+    start_index = 0
+    resume_from = state.config.resume_from
+    step_names = [step.__name__.replace("_step_", "") for step in _PIPELINE_STEPS]
+
+    if resume_from:
+        if resume_from.isdigit():
+            num = int(resume_from) - 1
+            if 0 <= num < len(step_names):
+                start_index = num
+            else:
+                state.reporter.log(f"警告: 不正なステップ番号 '{resume_from}' が指定されました。最初から実行します。")
+        else:
+            try:
+                start_index = step_names.index(resume_from)
+            except ValueError:
+                state.reporter.log(f"警告: 不正なステップ名 '{resume_from}' が指定されました。最初から実行します。")
+
+    for i in range(start_index, len(_PIPELINE_STEPS)):
+        step_func = _PIPELINE_STEPS[i]
+        try:
+            step_func(state)
+        except SystemExit:
+            return
+
+    state.reporter.log("すべての処理が完了しました。")
 
 
 def _maybe_prepend_intro(
