@@ -18,7 +18,7 @@ class TranscriptionResult:
         return {"text": self.text, "segments": self.segments}
 
 
-def transcribe_audio(audio_path, model_size: str = "small", *, env_info: EnvironmentInfo | None = None) -> TranscriptionResult:
+def transcribe_audio(audio_path, model_size: str = "large-v3", *, env_info: EnvironmentInfo | None = None) -> TranscriptionResult:
     try:
         import whisper  # type: ignore
     except Exception as exc:  # pragma: no cover - import guard
