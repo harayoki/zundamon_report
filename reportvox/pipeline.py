@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import difflib
 import json
 import os
 import pathlib
@@ -20,6 +21,7 @@ from .llm_client import chat_completion
 class _ProgressReporter:
     def __init__(self) -> None:
         self._start = time.monotonic()
+        self.timings: dict[str, float] = {}
 
     def elapsed(self) -> float:
         return time.monotonic() - self._start
@@ -43,6 +45,26 @@ class _ProgressReporter:
 
     def now(self) -> float:
         return time.monotonic()
+
+    def record_step(self, name: str, duration: float) -> None:
+        """ステップの処理時間を記録する。"""
+        self.timings[name] = self.timings.get(name, 0.0) + duration
+
+    def summarize(self) -> None:
+        """処理時間のサマリーを表示する。"""
+        print("\n--- 処理時間サマリー ---")
+        total_duration = self.elapsed()
+        # "finalize" ステップは変動が大きいため、それ以外の合計を計算
+        relevant_total = sum(d for n, d in self.timings.items() if n != "finalize")
+
+        sorted_steps = sorted(self.timings.items(), key=lambda item: item[1], reverse=True)
+
+        for name, duration in sorted_steps:
+            percentage = (duration / relevant_total) * 100 if relevant_total > 0 else 0
+            print(f"- {name:<15}: {self._format_duration(duration)} ({percentage:.1f}%)")
+        print("--------------------------")
+        print(f"- {'合計処理時間':<13}: {self._format_duration(total_duration)}")
+        print("--------------------------\n")
 
 
 def _estimate_remaining(total_steps: int, steps_done: int, elapsed: float) -> float | None:
@@ -162,7 +184,11 @@ def _load_transcription(path: pathlib.Path) -> transcribe.TranscriptionResult:
 
 
 def _llm_review_transcription(
-    result: transcribe.TranscriptionResult, *, backend: LLMBackend, env_info: EnvironmentInfo | None = None
+    result: transcribe.TranscriptionResult,
+    *,
+    backend: LLMBackend,
+    run_dir: pathlib.Path,
+    env_info: EnvironmentInfo | None = None,
 ) -> transcribe.TranscriptionResult:
     system_prompt = (
         "あなたは日本語の文字起こしの校正アシスタントです。"
@@ -195,7 +221,18 @@ def _llm_review_transcription(
         )
 
     reviewed_text = str(data.get("text", result.text)).strip()
-    return transcribe.TranscriptionResult(segments=reviewed_segments, text=reviewed_text)
+    reviewed_result = transcribe.TranscriptionResult(segments=reviewed_segments, text=reviewed_text)
+
+    diff = difflib.unified_diff(
+        result.text.splitlines(keepends=True),
+        reviewed_result.text.splitlines(keepends=True),
+        fromfile="before_llm_review.txt",
+        tofile="after_llm_review.txt",
+    )
+    diff_log_path = run_dir / "llm_review_diff.log"
+    diff_log_path.write_text("".join(diff), encoding="utf-8")
+
+    return reviewed_result
 
 
 def _load_diarization(path: pathlib.Path) -> list[diarize.DiarizedSegment]:
@@ -394,7 +431,10 @@ def _step_transcribe(state: PipelineState) -> None:
             reporter.log("LLM で文字起こしを校正しています...")
             try:
                 whisper_result = _llm_review_transcription(
-                    whisper_result, backend=config.llm_backend, env_info=env_info
+                    whisper_result,
+                    backend=config.llm_backend,
+                    run_dir=run_dir,
+                    env_info=env_info,
                 )
                 transcript_path.write_text(
                     json.dumps(whisper_result.as_json(), ensure_ascii=False, indent=2), encoding="utf-8"
@@ -477,7 +517,8 @@ def _step_stylize(state: PipelineState) -> None:
         stylized = _load_stylized(stylized_path)
     else:
         reporter.log("口調変換と定型句の挿入を実行しています...")
-        stylized = style_convert.apply_style(mapped, char1, char2, backend=config.llm_backend)
+        stylize_backend = config.llm_backend if config.style_with_llm else "none"
+        stylized = style_convert.apply_style(mapped, char1, char2, backend=stylize_backend)
         stylized = _maybe_prepend_intro(
             stylized,
             char1=char1,
@@ -708,12 +749,25 @@ def _run_pipeline_steps(state: PipelineState) -> None:
 
     for i in range(start_index, len(_PIPELINE_STEPS)):
         step_func = _PIPELINE_STEPS[i]
+        step_name = step_names[i]
+        step_start_time = state.reporter.now()
         try:
             step_func(state)
+            duration = state.reporter.now() - step_start_time
+            state.reporter.record_step(step_name, duration)
         except SystemExit:
+            duration = state.reporter.now() - step_start_time
+            state.reporter.record_step(step_name, duration)
+            state.reporter.summarize()
             return
+        except Exception:
+            duration = state.reporter.now() - step_start_time
+            state.reporter.record_step(step_name, duration)
+            state.reporter.summarize()
+            raise
 
     state.reporter.log("すべての処理が完了しました。")
+    state.reporter.summarize()
 
 
 def _maybe_prepend_intro(

@@ -38,3 +38,4 @@ class PipelineConfig:
     subtitle_mode: SubtitleMode = "off"
     subtitle_max_chars: int = 25
     review_transcript: TranscriptReviewMode = "off"
+    style_with_llm: bool = False

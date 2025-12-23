@@ -118,6 +118,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="文字起こし保存後に LLM で明らかな誤字脱字を校正してから次の工程へ進みます (--llm でバックエンド指定)。",
     )
     parser.add_argument(
+        "--style-with-llm",
+        action="store_true",
+        help="口調変換で LLM を使用します (--llm でバックエンド指定)。",
+    )
+    parser.add_argument(
         "--resume-from",
         dest="resume_from",
         default=None,
@@ -169,6 +174,7 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
         subtitle_mode=args.subtitles,
         subtitle_max_chars=args.subtitle_max_chars,
         review_transcript=review_mode,
+        style_with_llm=args.style_with_llm,
     )
 
 

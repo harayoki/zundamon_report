@@ -1,6 +1,6 @@
 # ReportVox（Preview）
 
-ReportVox は、音声ファイルを「文字起こし → 話者分離 → 口調変換 → VOICEVOX での音声生成 → WAV/MP3 出力」まで自動化する CLI ツールです。 
+RRWADME 
 
 ※ 口調変換は作成中
 
@@ -50,6 +50,71 @@ pip install "numpy<2"
 2. その他認証が求められるエラーが表示された場合も各ページで利用規約に同意してください。
 3.  Hugging Face Settings でトークンを作成。
 4. トークンを環境変数 PYANNOTE_TOKEN または --hf-token で渡してください。
+
+## ローカルLLM (Ollama) との連携
+文字起こし結果の自動校正 (`--review-transcript-llm`) などで、ローカルで動作するLLMと連携することができます。本ツールではOllama経由での利用を想定しています。
+
+### 1. Ollamaのインストール
+以下の公式サイトからOllamaをダウンロードし、インストールしてください。
+- [https://ollama.com/](https://ollama.com/)
+
+### 2. モデルのダウンロード
+次に、利用したいLLMモデルをダウンロードします。ターミナル（コマンドプロンプトやPowerShell）で以下のコマンドを実行します。
+性能とPCスペックのバランスに応じて選択してください。
+
+- **高精度モデル (推奨)**:
+  ```bash
+  ollama pull llama3
+  ```
+- **軽量モデル**:
+  ```bash
+  ollama pull gemma:2b
+  ```
+
+### 3. 環境変数の設定
+使用するモデル名を環境変数 `LOCAL_LLM_MODEL` に設定します。
+
+- **Windows (コマンドプロンプト) の場合:**
+  ```shell
+  set LOCAL_LLM_MODEL=llama3
+  ```
+- **Windows (PowerShell) の場合:**
+  ```powershell
+  $env:LOCAL_LLM_MODEL="llama3"
+  ```
+- **Linux / macOS の場合:**
+  ```bash
+  export LOCAL_LLM_MODEL=llama3
+  ```
+  恒久的に設定したい場合は、`.bashrc` や `.zshrc` などに追記してください。
+
+### 4. 実行
+コマンド実行時に `--llm local` オプションを追加して、ローカルLLMを指定します。
+
+```bash
+# 例: ローカルLLMで文字起こしを自動校正
+python -m reportvox input.wav --review-transcript-llm --llm local
+```
+
+### VOICEVOX Engine の起動
+
+本ツールはVOICEVOXアプリケーションではなく、VOICEVOX Engine（コアとなる合成エンジン）と連携します。
+
+1.  **Engineのダウンロード:**
+    VOICEVOX公式サイトから「VOICEVOX Engine」をダウンロードしてください。
+    *   [VOICEVOX公式サイト](https://voicevox.hiroshiba.jp/)
+    （お使いのPC環境に合わせてCPU版またはGPU版を選択してください。）
+
+2.  **Engineの起動:**
+    ダウンロードしたzipファイルを解凍後、中にある `run.exe` を実行してください。
+    実行するとコマンドプロンプトの画面が開き、以下のようなログが表示されれば起動成功です。
+    ```
+    INFO:     Uvicorn running on http://127.0.0.1:50021 (Press CTRL+C to quit)
+    ```
+    本ツールを実行する際は、このEngineが起動している状態を維持してください。
+
+3.  **URLの指定（任意）:**
+    Engineがデフォルト（`http://127.0.0.1:50021`）以外のURLやポートで起動している場合、本ツール実行時に `--voicevox-url` オプションで指定してください。
 
 ## 使い方 (コマンド例)
 ```bash
