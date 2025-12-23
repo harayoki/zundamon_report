@@ -191,14 +191,18 @@ def _llm_review_transcription(
     env_info: EnvironmentInfo | None = None,
 ) -> transcribe.TranscriptionResult:
     system_prompt = (
-        "あなたは日本語の文字起こしの校正アシスタントです。"
-        " 明らかな誤字脱字のみを修正し、話者の意図を変えないでください。"
-        " segments 配列の start/end は変更せず、text のみを書き換えてください。"
-        " JSON の構造は {\"segments\": [...], \"text\": \"...\"} のまま返してください。"
+        "あなたは、日本語の文字起こしを校正する専門家です。\n"
+        "以下のルールを厳密に守ってください:\n"
+        "- 応答は、修正後のJSONオブジェクトのみを含めてください。\n"
+        "- 説明、前置き、言い訳、追加のテキストは一切不要です。\n"
+        "- 明らかな誤字脱字や、不自然な句読点のみを修正してください。\n"
+        "- 話し手の意図や発言内容、固有名詞を絶対に変えないでください。\n"
+        "- segments配列のstart/endの値、および配列の長さは絶対に変更しないでください。\n"
+        "- 英語に翻訳しないでください。\n"
+        "- 応答のJSONは、元の構造 `{\"segments\": [...], \"text\": \"...\"}` を完全に維持してください。"
     )
     user_prompt = (
-        "次の JSON の text と segments[*].text の明らかな誤字脱字を修正してください。\n"
-        "start と end の値、segments の長さは絶対に変えないでください。\n"
+        "以下のJSONに含まれる `text` と `segments[*].text` の内容を、上記のルールに従って校正してください。\n"
         f"{json.dumps(result.as_json(), ensure_ascii=False)}"
     )
     content = chat_completion(system_prompt=system_prompt, user_prompt=user_prompt, backend=backend, env_info=env_info)
@@ -625,13 +629,14 @@ def _step_finalize(state: PipelineState) -> None:
         subtitle_segments = subtitles.align_segments_to_audio(
             state.stylized_segments, state.synthesized_paths, placements=state.placements
         )
+        max_chars = 0 if config.style_with_llm else config.subtitle_max_chars
         subtitle_paths = subtitles.write_subtitles(
             subtitle_segments,
             out_dir=out_dir,
             base_stem=state.output_base_name,
             mode=config.subtitle_mode,
             characters={char1.id: char1, char2.id: char2},
-            max_chars_per_line=config.subtitle_max_chars,
+            max_chars_per_line=max_chars,
         )
         reporter.log(f"字幕を出力しました: {[p.name for p in subtitle_paths]}")
         state.complete_step("字幕ファイルの生成が完了しました。", step_start)

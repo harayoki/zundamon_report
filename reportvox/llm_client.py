@@ -61,5 +61,25 @@ def chat_completion(
         if not content:
             raise RuntimeError("LLM 応答に content が含まれていません。")
         return str(content).strip()
+    except httpx.ConnectError as exc:
+        raise RuntimeError(
+            append_env_details(
+                f"LLM サーバーへの接続に失敗しました: {base_url}\n"
+                "Ollamaが起動しているか、--llm-base-url（または環境変数 LOCAL_LLM_BASE_URL）が正しいか確認してください。",
+                env_info,
+            )
+        ) from exc
+    except httpx.HTTPStatusError as exc:
+        error_details = exc.response.text
+        raise RuntimeError(
+            append_env_details(
+                f"LLM サーバーがエラーステータス {exc.response.status_code} を返しました。\n"
+                f"モデル名 '{model_name}' が正しいか、Ollamaでダウンロード済みか確認してください。\n"
+                f"サーバーからの詳細: {error_details}",
+                env_info,
+            )
+        ) from exc
     except Exception as exc:  # pragma: no cover - ネットワーク依存
-        raise RuntimeError(append_env_details("LLM 呼び出しに失敗しました。", env_info)) from exc
+        raise RuntimeError(
+            append_env_details(f"LLM 呼び出し中に予期せぬエラーが発生しました: {type(exc).__name__}: {exc}", env_info)
+        ) from exc
