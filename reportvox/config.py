@@ -10,7 +10,7 @@ from typing import Literal, Optional
 SpeakerMode = Literal["auto", "1", "2"]
 SubtitleMode = Literal["off", "all", "split"]
 TranscriptReviewMode = Literal["off", "manual", "llm"]
-LLMBackend = Literal["none", "openai", "local"]
+LLMBackend = Literal["none", "openai", "ollama"]
 
 
 @dataclass
@@ -30,6 +30,8 @@ class PipelineConfig:
     force_overwrite: bool
     whisper_model: str
     llm_backend: LLMBackend
+    llm_host: Optional[str]
+    llm_port: Optional[int]
     hf_token: Optional[str] = None
     speed_scale: float = 1.1
     output_duration: Optional[float] = None
@@ -39,3 +41,6 @@ class PipelineConfig:
     subtitle_max_chars: int = 25
     review_transcript: TranscriptReviewMode = "off"
     style_with_llm: bool = False
+    diarization_threshold: float = 0.8
+    intro1: Optional[str] = None
+    intro2: Optional[str] = None

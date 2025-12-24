@@ -31,6 +31,16 @@ def _positive_int(value: str) -> int:
     return number
 
 
+def _port(value: str) -> int:
+    try:
+        number = int(value)
+    except ValueError as exc:  # pragma: no cover - argparse handles messaging
+        raise argparse.ArgumentTypeError(f"ポート番号を指定してください: {value}") from exc
+    if not 1 <= number <= 65535:
+        raise argparse.ArgumentTypeError(f"1〜65535 のポート番号を指定してください: {value}")
+    return number
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="reportvox",
@@ -52,8 +62,16 @@ def build_parser() -> argparse.ArgumentParser:
         default="auto",
         help="話者数の扱い: auto=自動判定 / 1=単一話者として処理 / 2=2人固定（pyannote 認証が必要）。",
     )
+    parser.add_argument(
+        "--diarization-threshold",
+        type=float,
+        default=0.8,
+        help="話者分離のクラスタリング閾値（0.0-1.0）。値が低いほど別人として分離されやすくなります。",
+    )
     parser.add_argument("--speaker1", default="zundamon", help="主話者に割り当てるキャラクターID（characters/ 以下のID）。")
     parser.add_argument("--speaker2", default="metan", help="副話者に割り当てるキャラクターID（characters/ 以下のID）。")
+    parser.add_argument("--intro1", default=None, help="話者1の最初の挨拶文を上書きします。")
+    parser.add_argument("--intro2", default=None, help="話者2の最初の挨拶文を上書きします。")
     parser.add_argument(
         "--zunda-senior-job", dest="zunda_senior_job", default=None, help="ずんだもんが憧れる職業を指定（--zunda-junior-job と併用）。"
     )
@@ -86,9 +104,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--llm",
-        choices=["none", "openai", "local"],
+        choices=["none", "openai", "ollama"],
         default="none",
         help="口調変換に使う LLM バックエンド（none は変換なし）。",
+    )
+    parser.add_argument(
+        "--ollama-host",
+        default=None,
+        help="Ollama のホスト名 (default: 127.0.0.1)。",
+    )
+    parser.add_argument(
+        "--ollama-port",
+        type=_port,
+        default=None,
+        help="Ollama のポート番号 (default: 11434)。",
     )
     parser.add_argument(
         "--hf-token",
@@ -166,6 +195,8 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
         force_overwrite=args.force,
         whisper_model=args.model,
         llm_backend=args.llm,
+        llm_host=args.ollama_host,
+        llm_port=args.ollama_port,
         hf_token=args.hf_token,
         speed_scale=args.speed_scale,
         output_duration=args.duration,
@@ -175,6 +206,9 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
         subtitle_max_chars=args.subtitle_max_chars,
         review_transcript=review_mode,
         style_with_llm=args.style_with_llm,
+        diarization_threshold=args.diarization_threshold,
+        intro1=args.intro1,
+        intro2=args.intro2,
     )
 
 

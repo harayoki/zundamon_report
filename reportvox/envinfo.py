@@ -72,17 +72,21 @@ class EnvironmentInfo:
     ffmpeg_path: str
     ffmpeg_available: bool
     ffmpeg_version: str | None
+    llm_host: str | None
+    llm_port: int | None
     dependency_versions: Dict[str, str] = field(default_factory=dict)
     hf_token_source: str = "absent"
 
     @classmethod
-    def collect(cls, ffmpeg_path: str, hf_token_arg: Optional[str], env_token: Optional[str]) -> "EnvironmentInfo":
+    def collect(cls, ffmpeg_path: str, hf_token_arg: Optional[str], env_token: Optional[str], llm_host: Optional[str], llm_port: Optional[int]) -> "EnvironmentInfo":
         ffmpeg_probe = probe_ffmpeg(ffmpeg_path)
         token_source = "cli" if hf_token_arg is not None else "env" if env_token else "absent"
         return cls(
             ffmpeg_path=str(ffmpeg_probe.path),
             ffmpeg_available=ffmpeg_probe.available,
             ffmpeg_version=ffmpeg_probe.version,
+            llm_host=llm_host,
+            llm_port=llm_port,
             dependency_versions=gather_dependency_versions(),
             hf_token_source=token_source,
         )
@@ -103,6 +107,10 @@ class EnvironmentInfo:
                 lines.append(f"{name}: {version}")
         else:
             lines.append("依存モジュール: 検出なし")
+
+        if self.llm_host or self.llm_port:
+            llm_line = f"Ollama: host={self.llm_host or '未指定'}, port={self.llm_port or '未指定'}"
+            lines.append(llm_line)
 
         if self.hf_token_source == "cli":
             token_line = "Hugging Face Token の指定元: CLI 引数 (--hf-token)"

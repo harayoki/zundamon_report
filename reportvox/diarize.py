@@ -124,6 +124,7 @@ def diarize_audio(
     hf_token: Optional[str],
     work_dir,
     *,
+    threshold: float,
     env_info: Any = None,
 ) -> list[DiarizedSegment]:
     """話者分離を実行する。"""
@@ -145,6 +146,8 @@ def diarize_audio(
     # パイプラインの読み込み
     try:
         pipeline = PyannotePipeline.from_pretrained("pyannote/speaker-diarization-3.1")
+        if hasattr(pipeline, "clustering"):
+            pipeline.clustering.threshold = threshold
         device = env_info.device if hasattr(env_info, 'device') and env_info.device else torch.device("cpu")
         pipeline.to(device)
     except Exception as exc:

@@ -190,16 +190,32 @@ def _llm_review_transcription(
     run_dir: pathlib.Path,
     env_info: EnvironmentInfo | None = None,
 ) -> transcribe.TranscriptionResult:
+    # system_prompt = (
+    #     "あなたは、日本語の文字起こしを校正する専門家です。\n"
+    #     "以下のルールを厳密に守ってください:\n"
+    #     "- 応答は、修正後のJSONオブジェクトのみを含めてください。\n"
+    #     "- 説明、前置き、言い訳、追加のテキストは一切不要です。\n"
+    #     "- 明らかな誤字脱字や、不自然な句読点のみを修正してください。\n"
+    #     "- 話し手の意図や発言内容、固有名詞を絶対に変えないでください。\n"
+    #     "- segments配列のstart/endの値、および配列の長さは絶対に変更しないでください。\n"
+    #     "- 英語に翻訳しないでください。\n"
+    #     "- 応答のJSONは、元の構造 `{\"segments\": [...], \"text\": \"...\"}` を完全に維持してください。"
+    # )
     system_prompt = (
         "あなたは、日本語の文字起こしを校正する専門家です。\n"
         "以下のルールを厳密に守ってください:\n"
         "- 応答は、修正後のJSONオブジェクトのみを含めてください。\n"
         "- 説明、前置き、言い訳、追加のテキストは一切不要です。\n"
-        "- 明らかな誤字脱字や、不自然な句読点のみを修正してください。\n"
-        "- 話し手の意図や発言内容、固有名詞を絶対に変えないでください。\n"
+        "- 修正を許可するのは、明らかな誤字脱字・句読点・空白・全角半角の誤りのみです。\n"
+        "- 語尾（です/ます、だ/である、〜してください/〜しないでください等）を絶対に変更しないでください。\n"
+        "- 助詞、活用形、敬語、言い回し、同義語への置換を一切禁止します。\n"
+        "- 話し手の意図や発言内容、意味、ニュアンスを絶対に変えないでください。\n"
+        "- 固有名詞を絶対に変更しないでください。\n"
         "- segments配列のstart/endの値、および配列の長さは絶対に変更しないでください。\n"
+        "- 削除・省略は禁止。繰り返し表現もそのまま残すこと。\n"
+        "- 修正は置換のみ。削除・追加は禁止（句読点/空白/全角半角の修正は例外）。\n"
         "- 英語に翻訳しないでください。\n"
-        "- 応答のJSONは、元の構造 `{\"segments\": [...], \"text\": \"...\"}` を完全に維持してください。"
+        "- 応答のJSONは、元の構造 {\"segments\": [...], \"text\": \"...\"} を完全に維持してください。"
     )
     user_prompt = (
         "以下のJSONに含まれる `text` と `segments[*].text` の内容を、上記のルールに従って校正してください。\n"
@@ -395,7 +411,14 @@ def _step_prepare_input(state: PipelineState) -> None:
     step_start = reporter.now()
     if resume and normalized_input.exists():
         reporter.log("既存の正規化済み WAV を利用します。")
+    elif input_path.suffix.lower() == ".wav":
+        if input_path.resolve() == normalized_input.resolve():
+            reporter.log("入力が既に目的のWAVファイルのため、正規化をスキップします。")
+        else:
+            reporter.log("入力が WAV ファイルのため、正規化をスキップしてコピーします。")
+            shutil.copy2(input_path, normalized_input)
     else:
+        reporter.log("WAV 形式に正規化しています...")
         audio.normalize_to_wav(input_path, normalized_input, ffmpeg_path=config.ffmpeg_path, env_info=env_info)
     state.complete_step("WAV 正規化が完了しました。", step_start)
     state.normalized_input_path = normalized_input
@@ -479,6 +502,7 @@ def _step_diarize(state: PipelineState) -> None:
                 hf_token=hf_token,
                 work_dir=run_dir,
                 env_info=env_info,
+                threshold=config.diarization_threshold,
             )
         if torchcodec_warning.detected:
             reporter.log(
@@ -523,12 +547,7 @@ def _step_stylize(state: PipelineState) -> None:
         reporter.log("口調変換と定型句の挿入を実行しています...")
         stylize_backend = config.llm_backend if config.style_with_llm else "none"
         stylized = style_convert.apply_style(mapped, char1, char2, backend=stylize_backend)
-        stylized = _maybe_prepend_intro(
-            stylized,
-            char1=char1,
-            senior_job=config.zunda_senior_job,
-            junior_job=config.zunda_junior_job,
-        )
+        stylized = _prepend_introductions(stylized, char1=char1, char2=char2, config=config)
         _save_stylized(stylized, stylized_path)
         reporter.log("口調変換が完了し保存しました。")
     state.complete_step("口調変換工程が完了しました。", step_start)
@@ -690,6 +709,12 @@ def run_pipeline(config: PipelineConfig) -> None:
     run_id = config.resume_run_id or time.strftime("%Y%m%d-%H%M%S")
     run_dir = work_dir / run_id
 
+    if config.llm_backend == "local":
+        if config.llm_host is not None or config.llm_port is not None:
+            host = config.llm_host or "127.0.0.1"
+            port = config.llm_port or 11434
+            os.environ["LOCAL_LLM_BASE_URL"] = f"http://{host}:{port}/v1"
+
     if not resume:
         # 同じ秒に実行開始した際の run_id 競合を避ける
         suffix = 1
@@ -712,7 +737,7 @@ def run_pipeline(config: PipelineConfig) -> None:
         run_id=run_id,
         run_dir=run_dir,
         out_dir=out_dir,
-        env_info=EnvironmentInfo.collect(config.ffmpeg_path, config.hf_token, os.environ.get("PYANNOTE_TOKEN")),
+        env_info=EnvironmentInfo.collect(config.ffmpeg_path, config.hf_token, os.environ.get("PYANNOTE_TOKEN"), config.llm_host, config.llm_port),
     )
 
     hf_token = config.hf_token or os.environ.get("PYANNOTE_TOKEN")
@@ -775,32 +800,53 @@ def _run_pipeline_steps(state: PipelineState) -> None:
     state.reporter.summarize()
 
 
-def _maybe_prepend_intro(
+def _prepend_introductions(
     segments: Sequence[style_convert.StylizedSegment],
     char1: characters.CharacterMeta,
-    senior_job: Optional[str],
-    junior_job: Optional[str],
+    char2: characters.CharacterMeta,
+    config: PipelineConfig,
 ) -> list[style_convert.StylizedSegment]:
-    if not (senior_job and junior_job):
-        return list(segments)
+    intro_segments: list[style_convert.StylizedSegment] = []
 
-    speaker_label: str | None = None
-    for seg in segments:
-        if seg.character == char1.id:
-            speaker_label = seg.speaker
-            break
+    # 音声に登場するキャラクターとスピーカーラベルのマッピングを作成
+    speaker_map: dict[str, str] = {}
+    if segments:
+        for seg in segments:
+            if seg.character and seg.character not in speaker_map:
+                speaker_map[seg.character] = seg.speaker
+            if len(speaker_map) == 2:
+                break
+        # マッピングが空の場合（単一話者などでキャラクタ未割り当て）、char1に最初の話者ラベルを割り当てる
+        if not speaker_map:
+            speaker_map[char1.id] = segments[0].speaker
 
-    if speaker_label is None and segments:
-        speaker_label = segments[0].speaker
-    if speaker_label is None:
-        speaker_label = "A"
+    # 話者1の挨拶を処理
+    intro1_text = config.intro1
+    # --intro1 がなく、かつ条件を満たす場合にずんだもんの職業挨拶を生成
+    if intro1_text is None and char1.id == "zundamon" and config.zunda_senior_job and config.zunda_junior_job:
+        intro1_text = f"僕の名前はずんだもん、{config.zunda_senior_job}にあこがれる{config.zunda_junior_job}なのだ"
 
-    intro_text = f"僕の名前はずんだもん、{senior_job}にあこがれる{junior_job}なのだ"
-    intro_segment = style_convert.StylizedSegment(
-        start=0.0,
-        end=0.0,
-        text=intro_text,
-        speaker=speaker_label,
-        character=char1.id,
-    )
-    return [intro_segment, *segments]
+    if intro1_text and char1.id in speaker_map:
+        intro_segments.append(
+            style_convert.StylizedSegment(
+                start=0.0,
+                end=0.0,
+                text=intro1_text,
+                speaker=speaker_map[char1.id],
+                character=char1.id,
+            )
+        )
+
+    # 話者2の挨拶を処理
+    if config.intro2 and char2.id in speaker_map:
+        intro_segments.append(
+            style_convert.StylizedSegment(
+                start=0.0,
+                end=0.0,
+                text=config.intro2,
+                speaker=speaker_map[char2.id],
+                character=char2.id,
+            )
+        )
+
+    return intro_segments + list(segments)

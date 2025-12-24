@@ -70,11 +70,13 @@ def normalize_to_wav(
     cmd = [ffmpeg_path, "-y", "-i", str(src), str(dest)]
     print("[reportvox] wav正規化開始")
     try:
-        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        process = subprocess.run(
+            cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, encoding="utf-8"
+        )
     except subprocess.CalledProcessError as exc:
-        raise RuntimeError(
-            append_env_details("ffmpegによるwav正規化に失敗しました。入力に音声トラックが見つからないため変換できませんでした。", env_info)
-        ) from exc
+        error_output = exc.stderr
+        error_message = f"ffmpegによるwav正規化に失敗しました。ffmpegからのエラー:\n{error_output}"
+        raise RuntimeError(append_env_details(error_message, env_info)) from exc
     print("[reportvox] wav正規化完了")
     return dest
 
