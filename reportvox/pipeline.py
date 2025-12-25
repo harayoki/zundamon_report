@@ -101,23 +101,16 @@ def _estimate_total_duration(segments: Sequence[style_convert.StylizedSegment]) 
 
 
 def _build_target_durations(
-    segments: Sequence[style_convert.StylizedSegment], *, desired_total: Optional[float]
-) -> tuple[list[float], float, float]:
-    original_total = _estimate_total_duration(segments)
-    target_total = desired_total or original_total
-    if original_total <= 0 or target_total <= 0:
-        scale = 1.0
-    else:
-        scale = target_total / original_total
-
+    segments: Sequence[style_convert.StylizedSegment]
+) -> list[float]:
     durations: list[float] = []
     for idx, seg in enumerate(segments):
         next_start = segments[idx + 1].start if idx + 1 < len(segments) else seg.end
         gap_to_next = max(0.0, next_start - seg.start)
         segment_length = max(0.0, seg.end - seg.start)
         base = max(gap_to_next, segment_length, 0.05)
-        durations.append(max(base * scale, 0.05))
-    return durations, original_total, target_total
+        durations.append(max(base, 0.05))
+    return durations
 
 
 def _collect_existing_outputs(
@@ -609,8 +602,8 @@ def _step_concatenate(state: PipelineState) -> None:
     out_dir = state.out_dir
     env_info = state.env_info
 
-    target_durations, _, _ = _build_target_durations(
-        state.stylized_segments, desired_total=config.output_duration
+    target_durations = _build_target_durations(
+        state.stylized_segments
     )
 
     reporter.log("セグメントをタイムラインに配置しています...")

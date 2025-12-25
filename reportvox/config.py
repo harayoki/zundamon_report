@@ -34,7 +34,6 @@ class PipelineConfig:
     llm_port: Optional[int]
     hf_token: Optional[str] = None
     speed_scale: float = 1.1
-    output_duration: Optional[float] = None
     resume_run_id: Optional[str] = None
     resume_from: Optional[str] = None
     subtitle_mode: SubtitleMode = "off"
