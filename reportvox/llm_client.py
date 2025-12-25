@@ -17,12 +17,12 @@ def chat_completion(
     *,
     system_prompt: str,
     user_prompt: str,
-    backend: LLMBackend,
+    config: PipelineConfig,
     env_info: EnvironmentInfo | None = None,
-    model: str | None = None,
     ollama_options_overwrite: dict | None = None,
     timeout: float = 60.0,
 ) -> str:
+    backend = config.llm_backend
     if backend == "none":
         raise RuntimeError(
             append_env_details("LLM バックエンドが none のため呼び出せません。--llm openai などを指定してください。", env_info)
@@ -35,21 +35,19 @@ def chat_completion(
                 append_env_details("OPENAI_API_KEY が未設定のため LLM を呼び出せません。", env_info)
             )
         base_url = os.environ.get("OPENAI_API_BASE", "https://api.openai.com/v1").rstrip("/")
-        model_name = model or os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+        model_name = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
         headers = {"Authorization": f"Bearer {api_key}"}
-    elif backend == "ollama":
-        ollama_host = os.environ.get("OLLAMA_HOST") or "localhost"
-        if env_info and env_info.llm_host:
-            ollama_host = env_info.llm_host
-        
-        ollama_port_str = os.environ.get("OLLAMA_PORT") or "11434"
-        if env_info and env_info.llm_port:
-            ollama_port_str = str(env_info.llm_port)
-        
-        ollama_base_url = f"http://{ollama_host}:{ollama_port_str}"
-        # print("tags:", requests.get(f"{ollama_base_url}/api/tags").json())
+        # ここに OpenAI の API 呼び出しロジックを後で実装する必要がある
+        # 現状は Ollama のロジックのみが実装されているため、プレースホルダーとしてエラーを出す
+        raise NotImplementedError("OpenAI バックエンドは現在実装されていません。")
 
-        model_name = model or os.environ.get("OLLAMA_MODEL", "llama3")
+    elif backend == "ollama":
+        ollama_host = config.llm_host or os.environ.get("OLLAMA_HOST") or "localhost"
+        ollama_port = config.llm_port or int(os.environ.get("OLLAMA_PORT") or 11434)
+        
+        ollama_base_url = f"http://{ollama_host}:{ollama_port}"
+
+        model_name = config.ollama_model or os.environ.get("LOCAL_LLM_MODEL") or "llama3"
         client = ollama.Client(host=ollama_base_url)
         messages = [
             {"role": "system", "content": system_prompt},
@@ -58,12 +56,11 @@ def chat_completion(
         options: dict = {
             "temperature": 0.0,
             "top_p": 1.0,
-            # "num_predict": 2048,  # 短すぎると末尾が欠ける
-            "repeat_penalty": 1.0,  # 1.0に近いほど繰り返し抑制しない
+            "repeat_penalty": 1.0,
         }
         if ollama_options_overwrite:
-            for k, v in ollama_options_overwrite:
-                options[k] = v
+            options.update(ollama_options_overwrite)
+
         try:
             response = client.chat(model=model_name, messages=messages, options=options)
             content = response.get("message", {}).get("content")
@@ -79,15 +76,15 @@ def chat_completion(
                     env_info,
                 )
             ) from exc
-        except httpx.ConnectError as exc: # ollama-python は内部で httpx を使っているので、そのエラーも捕捉
+        except httpx.ConnectError as exc:
             raise RuntimeError(
                 append_env_details(
                     f"Ollama サーバーへの接続に失敗しました: {ollama_base_url}\n"
-                    "Ollamaが起動しているか、--ollama-host/--ollama-port（または環境変数 OLLAMA_HOST/OLLAMA_PORT）が正しいか確認してください。",
+                    "Ollamaが起動しているか、--ollama-host/--ollama-port が正しいか確認してください。",
                     env_info,
                 )
             ) from exc
-        except Exception as exc:  # pragma: no cover - ネットワーク依存
+        except Exception as exc:
             raise RuntimeError(
                 append_env_details(f"Ollama 呼び出し中に予期せぬエラーが発生しました: {type(exc).__name__}: {exc}", env_info)
             ) from exc

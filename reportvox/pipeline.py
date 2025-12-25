@@ -179,7 +179,7 @@ def _load_transcription(path: pathlib.Path) -> transcribe.TranscriptionResult:
 def _llm_review_transcription(
     result: transcribe.TranscriptionResult,
     *,
-    backend: LLMBackend,
+    config: PipelineConfig,
     run_dir: pathlib.Path,
     env_info: EnvironmentInfo | None = None,
 ) -> transcribe.TranscriptionResult:
@@ -214,7 +214,7 @@ def _llm_review_transcription(
         "以下のJSONに含まれる `text` と `segments[*].text` の内容を、上記のルールに従って校正してください。\n"
         f"{json.dumps(result.as_json(), ensure_ascii=False)}"
     )
-    content = chat_completion(system_prompt=system_prompt, user_prompt=user_prompt, backend=backend, env_info=env_info)
+    content = chat_completion(system_prompt=system_prompt, user_prompt=user_prompt, config=config, env_info=env_info)
     try:
         data = json.loads(content)
     except json.JSONDecodeError as exc:
@@ -452,7 +452,7 @@ def _step_transcribe(state: PipelineState) -> None:
             try:
                 whisper_result = _llm_review_transcription(
                     whisper_result,
-                    backend=config.llm_backend,
+                    config=config,
                     run_dir=run_dir,
                     env_info=env_info,
                 )
@@ -538,8 +538,7 @@ def _step_stylize(state: PipelineState) -> None:
         stylized = _load_stylized(stylized_path)
     else:
         reporter.log("口調変換と定型句の挿入を実行しています...")
-        stylize_backend = config.llm_backend if config.style_with_llm else "none"
-        stylized = style_convert.apply_style(mapped, char1, char2, backend=stylize_backend)
+        stylized = style_convert.apply_style(mapped, char1, char2, config=config)
         stylized = _prepend_introductions(stylized, char1=char1, char2=char2, config=config)
         _save_stylized(stylized, stylized_path)
         reporter.log("口調変換が完了し保存しました。")

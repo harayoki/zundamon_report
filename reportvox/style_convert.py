@@ -43,8 +43,8 @@ def _heuristic_phrase(segment: AlignedSegment, meta: CharacterMeta, inserted: se
     return text
 
 
-def _llm_transform(text: str, meta: CharacterMeta, backend: LLMBackend) -> list[str]:
-    if backend == "none":
+def _llm_transform(text: str, meta: CharacterMeta, config: PipelineConfig) -> list[str]:
+    if config.llm_backend == "none":
         return [text]
 
     system_prompt = (
@@ -62,7 +62,7 @@ def _llm_transform(text: str, meta: CharacterMeta, backend: LLMBackend) -> list[
         f"文章: {text}"
     )
     try:
-        content = chat_completion(system_prompt=system_prompt, user_prompt=user_prompt, backend=backend)
+        content = chat_completion(system_prompt=system_prompt, user_prompt=user_prompt, config=config)
         # 応答が空行を含む場合があるので、空行は除去する
         return [line for line in content.splitlines() if line.strip()]
     except Exception:
@@ -74,7 +74,7 @@ def apply_style(
     segments: Sequence[AlignedSegment],
     char1: CharacterMeta,
     char2: CharacterMeta,
-    backend: LLMBackend = "none",
+    config: PipelineConfig,
 ) -> list[StylizedSegment]:
     stylized: list[StylizedSegment] = []
     inserted: set[str] = set()
@@ -83,7 +83,7 @@ def apply_style(
         meta = char_map.get(seg.character or char1.id, char1)
 
         # LLM変換とヒューリスティックな口癖挿入を適用
-        texts = _llm_transform(seg.text, meta, backend)
+        texts = _llm_transform(seg.text, meta, config)
         if len(texts) == 1:
              # LLMが分割しなかった場合は、ヒューリスティックな口癖挿入を試みる
             texts = [_heuristic_phrase(seg, meta, inserted)]

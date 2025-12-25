@@ -114,6 +114,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Ollama のポート番号 (default: 11434)。",
     )
     parser.add_argument(
+        "--ollama-model",
+        default=None,
+        help="Ollama で使用するモデル名。デフォルトは環境変数 LOCAL_LLM_MODEL または 'llama3'。 ",
+    )
+    parser.add_argument(
         "--hf-token",
         default=None,
         help="pyannote.audio 用の Hugging Face Token（auto/2 人話者分離時に必要、環境変数 PYANNOTE_TOKEN も参照）。",
@@ -191,6 +196,7 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
         llm_backend=args.llm,
         llm_host=args.ollama_host,
         llm_port=args.ollama_port,
+        ollama_model=args.ollama_model,
         hf_token=args.hf_token,
         speed_scale=args.speed_scale,
         resume_run_id=args.resume_run_id,

@@ -71,8 +71,15 @@ pip install "numpy<2"
   ollama pull gemma:2b
   ```
 
-### 3. 環境変数の設定
-使用するモデル名を環境変数 `LOCAL_LLM_MODEL` に設定します。
+### 3. モデルの指定
+使用するモデルは `--ollama-model` 引数で指定するのが最も簡単です。
+
+```bash
+# gemma:2b モデルを使って実行
+python -m reportvox input.wav --llm local --ollama-model gemma:2b
+```
+
+引数を指定しない場合は、従来通り環境変数 `LOCAL_LLM_MODEL` が参照されます。
 
 - **Windows (コマンドプロンプト) の場合:**
   ```shell
@@ -86,7 +93,8 @@ pip install "numpy<2"
   ```bash
   export LOCAL_LLM_MODEL=llama3
   ```
-  恒久的に設定したい場合は、`.bashrc` や `.zshrc` などに追記してください。
+
+どちらも指定されていない場合のデフォルトは `llama3` です。
 
 ### 4. 実行
 コマンド実行時に `--llm local` オプションを追加して、ローカルLLMを指定します。
@@ -164,8 +172,12 @@ python -m reportvox input.mp4 --speakers auto --mp3
 - --bitrate: mp3 出力時のビットレート。
 - --resume <run_id>: 中断した工程から再開。
 - --keep-work: work/<run_id> を削除せず保持（開発/再出力向け）。
+- --llm {none,openai,ollama}: LLMバックエンドの指定。
+- --ollama-host: Ollamaのホスト名。
+- --ollama-port: Ollamaのポート番号。
+- --ollama-model: Ollamaで使用するモデル名。デフォルトは環境変数 LOCAL_LLM_MODEL または 'llama3'。
 - --hf-token: Hugging Face Token。
-- --subtitles {off,all,split}: SRT 字幕の出力モード。off で出力なし、all ですべての発話をまとめた 1 ファイル、split で話者ごとに別ファイル。
+- --subtitles {off,all,split}: SRT 字幕の出力モード。
 - --subtitle-max-chars: 字幕1枚あたりの最大文字数（デフォルト 25、0 で無制限）。
 - --review-transcript: 文字起こし結果を保存したあとで処理を停止し、transcript.json を手動修正したうえで表示される再開コマンドを実行して続行できるようにする。
 - --review-transcript-llm: 文字起こし結果を保存したあと、LLM で明らかな誤字脱字を自動校正してから続行する（--llm でバックエンド指定）。
