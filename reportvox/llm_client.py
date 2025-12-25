@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import os
 from typing import Literal
+import pathlib
+import subprocess
+import tempfile
 
 import ollama
 import httpx
@@ -88,5 +91,48 @@ def chat_completion(
             raise RuntimeError(
                 append_env_details(f"Ollama 呼び出し中に予期せぬエラーが発生しました: {type(exc).__name__}: {exc}", env_info)
             ) from exc
+    elif backend == "gemini":
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = pathlib.Path(tmpdir)
+            input_path = tmp_path / "prompt.txt"
+            prompt_content = f"[System]\n{system_prompt}\n\n[User]\n{user_prompt}\n"
+            input_path.write_text(prompt_content, encoding="utf-8")
+
+            prompt_arg = f"@\"{input_path}\""
+            command = ["gemini", "-p", prompt_arg]
+            try:
+                completed = subprocess.run(
+                    command,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                    check=False,
+                )
+            except FileNotFoundError as exc:
+                raise RuntimeError(
+                    append_env_details("Gemini CLI が見つかりません。gemini コマンドが PATH にあるか確認してください。", env_info)
+                ) from exc
+            except subprocess.TimeoutExpired as exc:
+                raise RuntimeError(
+                    append_env_details("Gemini CLI の実行がタイムアウトしました。", env_info)
+                ) from exc
+            except Exception as exc:  # pragma: no cover - unexpected subprocess errors
+                raise RuntimeError(
+                    append_env_details(f"Gemini CLI 実行中に予期せぬエラーが発生しました: {type(exc).__name__}: {exc}", env_info)
+                ) from exc
+
+            if completed.returncode != 0:
+                stderr = completed.stderr.strip()
+                raise RuntimeError(
+                    append_env_details(
+                        f"Gemini CLI がエラー終了しました (exit {completed.returncode}). stderr: {stderr}", env_info
+                    )
+                )
+
+            content = completed.stdout.strip()
+            if not content:
+                raise RuntimeError(append_env_details("Gemini CLI から応答が得られませんでした。", env_info))
+
+            return content
     else:
         raise RuntimeError(f"不明な LLM バックエンドが指定されました: {backend}")

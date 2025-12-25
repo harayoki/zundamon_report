@@ -46,6 +46,9 @@ def _heuristic_phrase(segment: AlignedSegment, meta: CharacterMeta, inserted: se
 def _llm_transform(text: str, meta: CharacterMeta, config: PipelineConfig) -> list[str]:
     if config.llm_backend == "none":
         return [text]
+    if config.llm_backend == "gemini":
+        # Gemini は文字起こし校正専用。口調変換は従来ロジックに任せる。
+        return [text]
 
     system_prompt = (
         "あなたは、与えられたキャラクターになりきって文章のスタイルを変換する、プロの日本語文体アシスタントです。\n"

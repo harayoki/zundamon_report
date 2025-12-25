@@ -104,6 +104,14 @@ python -m reportvox input.wav --llm local --ollama-model gemma:2b
 python -m reportvox input.wav --review-transcript-llm --llm local
 ```
 
+### ローカル Gemini CLI で文字起こしを校正する
+`--llm gemini` を指定すると、Ollama の代わりにローカルの Gemini CLI を使って文字起こしを校正できます。
+
+- コマンドはツールが自動で呼び出します。ユーザーが独自のコマンド文字列を指定する必要はありません。
+- プロンプトは一時ファイルに書き出され、`gemini -p "@<一時ファイル>"` で呼び出します。
+- CLI からの応答が空だった場合や不正な形式だった場合はエラー扱いとなり、校正なしで処理を続行します。
+- Gemini は口調変換（スタイル調整）には使用せず、文字起こし校正専用です。
+
 ### VOICEVOX Engine の起動
 
 本ツールはVOICEVOXアプリケーションではなく、VOICEVOX Engine（コアとなる合成エンジン）と連携します。
@@ -172,7 +180,7 @@ python -m reportvox input.mp4 --speakers auto --mp3
 - --bitrate: mp3 出力時のビットレート。
 - --resume <run_id>: 中断した工程から再開。
 - --keep-work: work/<run_id> を削除せず保持（開発/再出力向け）。
-- --llm {none,openai,ollama}: LLMバックエンドの指定。
+- --llm {none,openai,ollama,gemini}: LLMバックエンドの指定。
 - --ollama-host: Ollamaのホスト名。
 - --ollama-port: Ollamaのポート番号。
 - --ollama-model: Ollamaで使用するモデル名。デフォルトは環境変数 LOCAL_LLM_MODEL または 'llama3'。

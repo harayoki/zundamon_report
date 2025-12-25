@@ -10,7 +10,7 @@ from typing import Literal, Optional
 SpeakerMode = Literal["auto", "1", "2"]
 SubtitleMode = Literal["off", "all", "split"]
 TranscriptReviewMode = Literal["off", "manual", "llm"]
-LLMBackend = Literal["none", "openai", "ollama"]
+LLMBackend = Literal["none", "openai", "ollama", "gemini"]
 
 
 @dataclass
