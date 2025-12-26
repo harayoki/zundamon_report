@@ -14,6 +14,7 @@ import requests
 
 from .config import LLMBackend
 from .envinfo import EnvironmentInfo, append_env_details
+from reportvox.config import PipelineConfig
 
 
 def chat_completion(
