@@ -1,5 +1,6 @@
 id: kotaro
 display_name: 白上虎太郎
+main_color: "#2b9fb3"
 voicevox:
   speaker_id: 12
 style:

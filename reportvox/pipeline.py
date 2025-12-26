@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import difflib
 import json
+import math
 import os
 import pathlib
 import shutil
@@ -12,7 +13,7 @@ import time
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Sequence
 
-from . import diarize, transcribe, style_convert, voicevox, audio, characters, subtitles
+from . import audio, characters, diarize, style_convert, subtitles, transcribe, utils, voicevox
 from .config import LLMBackend, PipelineConfig, SpeakerMode, SubtitleMode, TranscriptReviewMode
 from .envinfo import EnvironmentInfo, append_env_details
 from .llm_client import chat_completion
@@ -293,6 +294,39 @@ def _summarize_speaker_durations(aligned: Sequence[diarize.AlignedSegment]) -> D
     return totals
 
 
+def _rgb_distance(c1: tuple[int, int, int], c2: tuple[int, int, int]) -> float:
+    return math.sqrt(sum((a - b) ** 2 for a, b in zip(c1, c2)))
+
+
+def _luminance(rgb: tuple[int, int, int]) -> float:
+    r, g, b = (value / 255.0 for value in rgb)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def _spread_default_colors(color1: str, color2: str, *, threshold: float = 90.0) -> tuple[str, str, bool]:
+    base1 = utils.hex_to_rgb(color1)
+    base2 = utils.hex_to_rgb(color2)
+    if _rgb_distance(base1, base2) >= threshold:
+        return color1, color2, False
+
+    bright_first = _luminance(base1) >= _luminance(base2)
+    brighter = base1 if bright_first else base2
+    darker = base2 if bright_first else base1
+
+    def _lighten(rgb: tuple[int, int, int], amount: int = 28) -> tuple[int, int, int]:
+        return tuple(min(255, value + amount) for value in rgb)  # type: ignore[return-value]
+
+    def _darken(rgb: tuple[int, int, int], amount: int = 28) -> tuple[int, int, int]:
+        return tuple(max(0, value - amount) for value in rgb)  # type: ignore[return-value]
+
+    adjusted_bright = _lighten(brighter)
+    adjusted_dark = _darken(darker)
+
+    if bright_first:
+        return utils.rgb_to_hex(adjusted_bright), utils.rgb_to_hex(adjusted_dark), True
+    return utils.rgb_to_hex(adjusted_dark), utils.rgb_to_hex(adjusted_bright), True
+
+
 def _map_speakers(
     aligned: Sequence[diarize.AlignedSegment],
     totals: Dict[str, float],
@@ -324,6 +358,52 @@ def _map_speakers(
     return mapped
 
 
+def _ensure_character_colors(
+    state: "PipelineState", char1: characters.CharacterMeta, char2: characters.CharacterMeta
+) -> Dict[str, str]:
+    if state.character_colors is not None:
+        return state.character_colors
+
+    config = state.config
+    reporter = state.reporter
+
+    color1 = config.color1 or char1.main_color
+    color2 = config.color2 or char2.main_color
+
+    try:
+        color1 = utils.normalize_hex_color(color1)
+        color2 = utils.normalize_hex_color(color2)
+    except ValueError as exc:
+        raise ValueError(str(exc)) from exc
+
+    color1_from_arg = config.color1 is not None
+    color2_from_arg = config.color2 is not None
+
+    if color1_from_arg and color2_from_arg and color1 == color2:
+        reporter.log(
+            f"警告: speaker1 と speaker2 のカラーコードが同じです ({color1})。指定された値をそのまま使用します。"
+        )
+
+    if not color1_from_arg and not color2_from_arg:
+        spread1, spread2, adjusted = _spread_default_colors(color1, color2)
+        if adjusted:
+            reporter.log(
+                "メインカラーが近いため差を広げました: "
+                f"{char1.display_name} {color1} -> {spread1}, {char2.display_name} {color2} -> {spread2}"
+            )
+            color1, color2 = spread1, spread2
+
+    reporter.log(
+        "キャラクターカラー: "
+        f"{char1.display_name}={color1}{' (指定)' if color1_from_arg else ' (メインカラー)'} / "
+        f"{char2.display_name}={color2}{' (指定)' if color2_from_arg else ' (メインカラー)'}"
+    )
+
+    colors = {char1.id: color1, char2.id: color2}
+    state.character_colors = colors
+    return colors
+
+
 @dataclass
 class PipelineState:
     """パイプラインの実行状態を管理する。"""
@@ -344,6 +424,7 @@ class PipelineState:
     stylized_segments: Optional[list[style_convert.StylizedSegment]] = None
     synthesized_paths: Optional[list[pathlib.Path]] = None
     placements: Optional[list[dict]] = None
+    character_colors: Optional[Dict[str, str]] = None
 
     def complete_step(self, message: str, start_time: float) -> None:
         """ステップ完了を報告し、進捗を更新する。"""
@@ -529,6 +610,7 @@ def _step_stylize(state: PipelineState) -> None:
 
     char1 = characters.load_character(config.speaker1)
     char2 = characters.load_character(config.speaker2)
+    _ensure_character_colors(state, char1, char2)
     mapped = _map_speakers(aligned, totals, config.speakers, char1, char2)
 
     stylized_path = run_dir / "stylized.json"

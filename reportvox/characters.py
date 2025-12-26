@@ -9,6 +9,8 @@ from typing import Any, Dict, Optional
 
 import yaml
 
+from . import utils
+
 
 CHARACTER_DIR = pathlib.Path(__file__).resolve().parent.parent / "characters"
 
@@ -17,6 +19,7 @@ CHARACTER_DIR = pathlib.Path(__file__).resolve().parent.parent / "characters"
 class CharacterMeta:
     id: str
     display_name: str
+    main_color: str
     voicevox_speaker_id: Optional[int]
     style_first_person: str
     style_endings: list[str]
@@ -39,6 +42,7 @@ def load_character(char_id: str) -> CharacterMeta:
     return CharacterMeta(
         id=meta.get("id", char_id),
         display_name=meta.get("display_name", char_id),
+        main_color=_read_main_color(meta, char_id=char_id),
         voicevox_speaker_id=_read_voicevox(meta),
         style_first_person=meta.get("style", {}).get("first_person", ""),
         style_endings=meta.get("style", {}).get("endings", []),
@@ -57,3 +61,11 @@ def _read_voicevox(meta: Dict[str, Any]) -> Optional[int]:
         return int(speaker_id)
     except Exception:
         return None
+
+
+def _read_main_color(meta: Dict[str, Any], *, char_id: str) -> str:
+    raw = meta.get("main_color", "")
+    try:
+        return utils.normalize_hex_color(str(raw))
+    except ValueError as exc:
+        raise ValueError(f"キャラクターID '{char_id}' の main_color は #RRGGBB 形式で指定してください: {raw}") from exc

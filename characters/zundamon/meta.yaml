@@ -1,5 +1,6 @@
 id: zundamon
 display_name: ずんだもん
+main_color: "#3fa760"
 voicevox:
   speaker_id: 3
 style:

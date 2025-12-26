@@ -1,5 +1,6 @@
 id: sayo
 display_name: 小夜／SAYO
+main_color: "#9c7ad1"
 voicevox:
   speaker_id: 33
 style:

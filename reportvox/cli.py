@@ -7,6 +7,7 @@ import pathlib
 import sys
 from typing import Sequence
 
+from reportvox import utils
 from reportvox.config import PipelineConfig
 from reportvox.pipeline import run_pipeline
 
@@ -41,6 +42,13 @@ def _port(value: str) -> int:
     return number
 
 
+def _hex_color(value: str) -> str:
+    try:
+        return utils.normalize_hex_color(value)
+    except ValueError as exc:  # pragma: no cover - argparse handles messaging
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="reportvox",
@@ -70,6 +78,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--speaker1", default="zundamon", help="主話者に割り当てるキャラクターID（characters/ 以下のID）。")
     parser.add_argument("--speaker2", default="metan", help="副話者に割り当てるキャラクターID（characters/ 以下のID）。")
+    parser.add_argument(
+        "--color1",
+        type=_hex_color,
+        default=None,
+        help="話者1に使うカラーコード（#RRGGBB）。省略時はキャラクターのメインカラーを使用します。",
+    )
+    parser.add_argument(
+        "--color2",
+        type=_hex_color,
+        default=None,
+        help="話者2に使うカラーコード（#RRGGBB）。省略時はキャラクターのメインカラーを使用します。",
+    )
     parser.add_argument("--intro1", default=None, help="話者1の最初の挨拶文を上書きします。")
     parser.add_argument("--intro2", default=None, help="話者2の最初の挨拶文を上書きします。")
     parser.add_argument(
@@ -184,6 +204,8 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
         speakers=args.speakers,
         speaker1=args.speaker1,
         speaker2=args.speaker2,
+        color1=args.color1,
+        color2=args.color2,
         zunda_senior_job=args.zunda_senior_job,
         zunda_junior_job=args.zunda_junior_job,
         want_mp3=args.mp3,

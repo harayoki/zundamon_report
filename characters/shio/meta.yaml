@@ -1,5 +1,6 @@
 id: shio
 display_name: 剣崎雌雄
+main_color: "#4ca58f"
 voicevox:
   speaker_id: 24
 style:

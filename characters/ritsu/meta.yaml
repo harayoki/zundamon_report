@@ -1,5 +1,6 @@
 id: ritsu
 display_name: 波音リツ
+main_color: "#3b6dd6"
 voicevox:
   speaker_id: 10
 style:

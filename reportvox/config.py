@@ -20,6 +20,8 @@ class PipelineConfig:
     speakers: SpeakerMode
     speaker1: str
     speaker2: str
+    color1: Optional[str]
+    color2: Optional[str]
     zunda_senior_job: Optional[str]
     zunda_junior_job: Optional[str]
     want_mp3: bool

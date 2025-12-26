@@ -1,5 +1,6 @@
 id: metan
 display_name: めたん
+main_color: "#d64aa0"
 voicevox:
   speaker_id: 2
 style:

@@ -1,5 +1,6 @@
 id: tsumugi
 display_name: 春日部つむぎ
+main_color: "#6fc9a4"
 voicevox:
   speaker_id: 8
 style:
