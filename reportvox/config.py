@@ -41,6 +41,13 @@ class PipelineConfig:
     resume_from: Optional[str] = None
     subtitle_mode: SubtitleMode = "off"
     subtitle_max_chars: int = 25
+    subtitle_font: Optional[str] = None
+    subtitle_font_size: int = 48
+    video_width: int = 1920
+    video_height: int = 1080
+    video_fps: int = 24
+    output_mp4: bool = False
+    output_mov: bool = False
     review_transcript: TranscriptReviewMode = "llm"
     style_with_llm: bool = False
     diarization_threshold: float = 0.8

@@ -32,6 +32,13 @@ def _positive_int(value: str) -> int:
     return number
 
 
+def _positive_nonzero_int(value: str) -> int:
+    number = _positive_int(value)
+    if number <= 0:
+        raise argparse.ArgumentTypeError(f"正の整数を指定してください: {value}")
+    return number
+
+
 def _port(value: str) -> int:
     try:
         number = int(value)
@@ -100,6 +107,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--mp3", action="store_true", help="mp3 を生成（out/ には mp3 だけを出力）。")
     parser.add_argument("--bitrate", default="192k", help="mp3 出力時のビットレート（--mp3 使用時のみ）。")
+    parser.add_argument("--mp4", action="store_true", help="字幕付きの mp4 動画を生成します。")
+    parser.add_argument("--mov", action="store_true", help="字幕付きの透明 mov 動画を生成します。")
     parser.add_argument("--ffmpeg-path", default="ffmpeg", help="ffmpeg 実行ファイルへのパス（コマンド名またはフルパス）。")
     parser.add_argument(
         "--output-name",
@@ -154,6 +163,31 @@ def build_parser() -> argparse.ArgumentParser:
         type=_positive_int,
         default=25,
         help="字幕1枚あたりの最大文字数。0 で制限なし。デフォルトは 25。",
+    )
+    parser.add_argument("--subtitle-font", default=None, help="動画字幕に使用するフォント名 (libass 経由で解決できるもの)。")
+    parser.add_argument(
+        "--subtitle-font-size",
+        type=_positive_nonzero_int,
+        default=48,
+        help="動画字幕のフォントサイズ (pt)。デフォルトは 48。",
+    )
+    parser.add_argument(
+        "--video-width",
+        type=_positive_nonzero_int,
+        default=1920,
+        help="動画出力時の横幅 (ピクセル)。",
+    )
+    parser.add_argument(
+        "--video-height",
+        type=_positive_nonzero_int,
+        default=1080,
+        help="動画出力時の縦幅 (ピクセル)。",
+    )
+    parser.add_argument(
+        "--video-fps",
+        type=_positive_nonzero_int,
+        default=24,
+        help="動画出力時のフレームレート。",
     )
     parser.add_argument(
         "--review-transcript",
@@ -232,6 +266,13 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
         resume_from=args.resume_from,
         subtitle_mode=args.subtitles,
         subtitle_max_chars=args.subtitle_max_chars,
+        subtitle_font=args.subtitle_font,
+        subtitle_font_size=args.subtitle_font_size,
+        video_width=args.video_width,
+        video_height=args.video_height,
+        video_fps=args.video_fps,
+        output_mp4=args.mp4,
+        output_mov=args.mov,
         review_transcript=review_mode,
         style_with_llm=args.style_with_llm,
         diarization_threshold=args.diarization_threshold,
