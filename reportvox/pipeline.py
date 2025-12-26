@@ -287,6 +287,28 @@ def _load_stylized(path: pathlib.Path) -> list[style_convert.StylizedSegment]:
     return segments
 
 
+def _format_segments_for_diff(
+    segments: Sequence[diarize.AlignedSegment | style_convert.StylizedSegment],
+) -> list[str]:
+    lines: list[str] = []
+    for seg in segments:
+        label = getattr(seg, "character", None) or getattr(seg, "speaker", "")
+        prefix = f"[{label}] " if label else ""
+        lines.append(f"{prefix}{getattr(seg, 'text', '')}\n")
+    return lines
+
+
+def _log_style_diff(
+    original: Sequence[diarize.AlignedSegment],
+    stylized: Sequence[style_convert.StylizedSegment],
+    path: pathlib.Path,
+) -> None:
+    before = _format_segments_for_diff(original)
+    after = _format_segments_for_diff(stylized)
+    diff = difflib.unified_diff(before, after, fromfile="before_stylize.txt", tofile="after_stylize.txt")
+    path.write_text("".join(diff), encoding="utf-8")
+
+
 def _summarize_speaker_durations(aligned: Sequence[diarize.AlignedSegment]) -> Dict[str, float]:
     totals: Dict[str, float] = {}
     for seg in aligned:
@@ -524,20 +546,23 @@ def _step_transcribe(state: PipelineState) -> None:
             reporter.log(f"python -m reportvox --resume {state.run_id}")
             raise SystemExit(0)
         elif config.review_transcript == "llm":
-            reporter.log("LLM で文字起こしを校正しています...")
-            try:
-                whisper_result = _llm_review_transcription(
-                    whisper_result,
-                    config=config,
-                    run_dir=run_dir,
-                    env_info=env_info,
-                )
-                transcript_path.write_text(
-                    json.dumps(whisper_result.as_json(), ensure_ascii=False, indent=2), encoding="utf-8"
-                )
-                reporter.log("LLM による校正を完了し、transcript.json を更新しました。")
-            except Exception as exc:
-                reporter.log(f"LLM 校正に失敗したため、元の文字起こしで続行します: {exc}")
+            if config.llm_backend == "none":
+                reporter.log("LLM バックエンドが指定されていないため、誤字脱字の自動校正をスキップします (--llm で設定可能)。")
+            else:
+                reporter.log("LLM で文字起こしを校正しています...")
+                try:
+                    whisper_result = _llm_review_transcription(
+                        whisper_result,
+                        config=config,
+                        run_dir=run_dir,
+                        env_info=env_info,
+                    )
+                    transcript_path.write_text(
+                        json.dumps(whisper_result.as_json(), ensure_ascii=False, indent=2), encoding="utf-8"
+                    )
+                    reporter.log("LLM による校正を完了し、transcript.json を更新しました。")
+                except Exception as exc:
+                    reporter.log(f"LLM 校正に失敗したため、元の文字起こしで続行します: {exc}")
     state.complete_step("文字起こし工程が完了しました。", step_start)
     state.transcription_result = whisper_result
 
@@ -618,6 +643,7 @@ def _step_stylize(state: PipelineState) -> None:
         stylized = style_convert.apply_style(mapped, char1, char2, config=config)
         stylized = _prepend_introductions(stylized, char1=char1, char2=char2, config=config)
         _save_stylized(stylized, stylized_path)
+        _log_style_diff(mapped, stylized, run_dir / "style_diff.log")
         reporter.log("口調変換が完了し保存しました。")
     state.complete_step("口調変換工程が完了しました。", step_start)
     state.stylized_segments = stylized

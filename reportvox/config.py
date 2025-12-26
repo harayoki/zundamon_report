@@ -41,7 +41,7 @@ class PipelineConfig:
     resume_from: Optional[str] = None
     subtitle_mode: SubtitleMode = "off"
     subtitle_max_chars: int = 25
-    review_transcript: TranscriptReviewMode = "off"
+    review_transcript: TranscriptReviewMode = "llm"
     style_with_llm: bool = False
     diarization_threshold: float = 0.8
     intro1: Optional[str] = None

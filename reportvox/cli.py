@@ -166,6 +166,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="文字起こし保存後に LLM で明らかな誤字脱字を校正してから次の工程へ進みます (--llm でバックエンド指定)。",
     )
     parser.add_argument(
+        "--skip-review-transcript",
+        action="store_true",
+        help="誤字脱字の自動校正を行わずに次の工程へ進みます。",
+    )
+    parser.add_argument(
         "--style-with-llm",
         action="store_true",
         help="口調変換で LLM を使用します (--llm でバックエンド指定)。",
@@ -191,11 +196,13 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
 
     if args.review_transcript and args.review_transcript_llm:
         parser.error("--review-transcript と --review-transcript-llm は同時に指定できません。")
+    if args.skip_review_transcript and (args.review_transcript or args.review_transcript_llm):
+        parser.error("--skip-review-transcript は他の誤字脱字校正オプションと同時に指定できません。")
 
     input_path = pathlib.Path(args.input).expanduser().resolve() if args.input else None
-    review_mode = "off"
-    if args.review_transcript_llm:
-        review_mode = "llm"
+    review_mode = "llm"
+    if args.skip_review_transcript:
+        review_mode = "off"
     elif args.review_transcript:
         review_mode = "manual"
     return PipelineConfig(
