@@ -34,7 +34,7 @@ def render_video_with_subtitles(
 
     base_color = "black@0" if transparent else "black"
     subtitle_filter = _escape_filter_path(subtitles)
-    filter_complex = f"subtitles={subtitle_filter}"
+    filter_complex = f"[0:v]subtitles={subtitle_filter}[vout]"
 
     cmd = [
         ffmpeg_path,
@@ -48,7 +48,7 @@ def render_video_with_subtitles(
         "-filter_complex",
         filter_complex,
         "-map",
-        "0:v",
+        "[vout]",
         "-map",
         "1:a",
     ]
