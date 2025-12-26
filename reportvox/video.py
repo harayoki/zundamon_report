@@ -83,6 +83,15 @@ def render_video_with_subtitles(
         ]
 
     try:
-        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(
+            cmd,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+        )
     except subprocess.CalledProcessError as exc:
-        raise RuntimeError(append_env_details("ffmpeg による動画生成に失敗しました。", env_info)) from exc
+        error_output = exc.stderr or ""
+        message = f"ffmpeg による動画生成に失敗しました。ffmpegからのエラー:\n{error_output}"
+        raise RuntimeError(append_env_details(message, env_info)) from exc

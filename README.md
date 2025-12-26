@@ -159,6 +159,10 @@ python -m reportvox input.wav -f
 python -m reportvox input.wav --subtitles all  # 2話者を1つのファイルにまとめて出力
 python -m reportvox input.wav --subtitles split  # 話者ごとに別ファイルを出力
 
+# 字幕付きの動画 (mp4/mov) を出力
+python -m reportvox input.wav --mp4  # mp4 を生成
+python -m reportvox input.wav --mov --video-width 1280 --video-height 720 --video-fps 30  # 透明movをHD/30fpsで生成
+
 # 動画ファイルも入力可、MP3も生成
 python -m reportvox input.mp4 --speakers auto --mp3
 ```
@@ -187,8 +191,14 @@ python -m reportvox input.mp4 --speakers auto --mp3
 - --hf-token: Hugging Face Token。
 - --subtitles {off,all,split}: SRT 字幕の出力モード。
 - --subtitle-max-chars: 字幕1枚あたりの最大文字数（デフォルト 25、0 で無制限）。
+- --subtitle-font: 動画用ASS字幕に使用するフォント名（libass で解決可能なもの）。
+- --subtitle-font-size: 動画用ASS字幕のフォントサイズ。デフォルトは 48 pt。
 - --review-transcript: 文字起こし結果を保存したあとで処理を停止し、transcript.json を手動修正したうえで表示される再開コマンドを実行して続行できるようにする。
 - --review-transcript-llm: 文字起こし結果を保存したあと、LLM で明らかな誤字脱字を自動校正してから続行する（--llm でバックエンド指定）。
+- --mp4: 字幕焼き込み済みの mp4 を生成。
+- --mov: 透明背景の mov (ProRes 4444) を生成。
+- --video-width / --video-height: 動画の解像度をピクセルで指定（デフォルト 1920x1080）。
+- --video-fps: 動画のフレームレート。デフォルト 24 fps。
 
 ## カスタム話者・口癖の追加
 新しいキャラクターの追加や口癖の調整方法は「[キャラクター追加・口癖設定ガイド](docs/characters.md)」にまとめています。
