@@ -1,5 +1,6 @@
 id: himari
 display_name: 冥鳴ひまり
+main_color: "#f5c542"
 voicevox:
   speaker_id: 18
 style:

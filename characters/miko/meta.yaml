@@ -1,5 +1,6 @@
 id: miko
 display_name: 櫻歌ミコ
+main_color: "#b03060"
 voicevox:
   speaker_id: 30
 style:

@@ -1,5 +1,6 @@
 id: hau
 display_name: 雨晴はう
+main_color: "#e58a3b"
 voicevox:
   speaker_id: 9
 style:

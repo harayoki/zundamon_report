@@ -1,5 +1,6 @@
 id: sora
 display_name: 九州そら
+main_color: "#48a0e0"
 voicevox:
   speaker_id: 20
 style:

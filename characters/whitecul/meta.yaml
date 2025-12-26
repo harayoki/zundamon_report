@@ -1,5 +1,6 @@
 id: whitecul
 display_name: WhiteCUL
+main_color: "#cfd5e2"
 voicevox:
   speaker_id: 25
 style:

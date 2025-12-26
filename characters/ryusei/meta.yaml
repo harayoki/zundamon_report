@@ -1,5 +1,6 @@
 id: ryusei
 display_name: 青山龍星
+main_color: "#1f4f8c"
 voicevox:
   speaker_id: 17
 style:
