@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from typing import Iterable, List, Optional, Sequence
+from typing import Sequence
 
-from .diarize import AlignedSegment
 from .characters import CharacterMeta
-from .config import LLMBackend # <-- 追加
-from .llm_client import chat_completion # <-- 修正
+from .config import PipelineConfig
+from .diarize import AlignedSegment
+from .llm_client import chat_completion
 
 
 @dataclass
@@ -44,6 +44,9 @@ def _heuristic_phrase(segment: AlignedSegment, meta: CharacterMeta, inserted: se
 
 
 def _llm_transform(text: str, meta: CharacterMeta, config: PipelineConfig) -> list[str]:
+    if not config.style_with_llm:
+        return [text]
+
     if config.llm_backend == "none":
         return [text]
     if config.llm_backend == "gemini":
@@ -88,7 +91,7 @@ def apply_style(
         # LLM変換とヒューリスティックな口癖挿入を適用
         texts = _llm_transform(seg.text, meta, config)
         if len(texts) == 1:
-             # LLMが分割しなかった場合は、ヒューリスティックな口癖挿入を試みる
+            # LLMが分割しなかった場合は、ヒューリスティックな口癖挿入を試みる
             texts = [_heuristic_phrase(seg, meta, inserted)]
 
         # 分割されたセグメントを生成
@@ -122,3 +125,4 @@ def apply_style(
                 )
             )
     return stylized
+
