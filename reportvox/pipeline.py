@@ -13,7 +13,7 @@ import time
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Sequence
 
-from . import audio, characters, diarize, style_convert, subtitles, transcribe, utils, voicevox
+from . import audio, characters, diarize, style_convert, subtitles, transcribe, utils, video, voicevox
 from .config import LLMBackend, PipelineConfig, SpeakerMode, SubtitleMode, TranscriptReviewMode
 from .envinfo import EnvironmentInfo, append_env_details
 from .llm_client import chat_completion
@@ -117,9 +117,11 @@ def _build_target_durations(
 def _collect_existing_outputs(
     out_dir: pathlib.Path,
     base_name: str,
-    *, 
+    *,
     want_mp3: bool,
     subtitle_mode: SubtitleMode,
+    want_mp4: bool,
+    want_mov: bool,
 ) -> list[pathlib.Path]:
     existing: list[pathlib.Path] = []
     if want_mp3:
@@ -130,6 +132,15 @@ def _collect_existing_outputs(
         wav_path = out_dir / f"{base_name}.wav"
         if wav_path.exists():
             existing.append(wav_path)
+
+    if want_mp4:
+        mp4_path = out_dir / f"{base_name}.mp4"
+        if mp4_path.exists():
+            existing.append(mp4_path)
+    if want_mov:
+        mov_path = out_dir / f"{base_name}.mov"
+        if mov_path.exists():
+            existing.append(mov_path)
 
     if subtitle_mode == "all":
         srt_path = out_dir / f"{base_name}.srt"
@@ -494,6 +505,8 @@ def _step_prepare_input(state: PipelineState) -> None:
         output_base,
         want_mp3=config.want_mp3,
         subtitle_mode=config.subtitle_mode,
+        want_mp4=config.output_mp4,
+        want_mov=config.output_mov,
     )
     if existing_outputs and not config.force_overwrite:
         _confirm_overwrite(existing_outputs)
@@ -736,14 +749,20 @@ def _step_finalize(state: PipelineState) -> None:
 
     char1 = characters.load_character(config.speaker1)
     char2 = characters.load_character(config.speaker2)
+    colors = _ensure_character_colors(state, char1, char2)
 
-    if config.subtitle_mode != "off":
-        reporter.log("字幕ファイルを生成しています...")
-        step_start = reporter.now()
+    need_video = config.output_mp4 or config.output_mov
+    subtitle_segments: list[style_convert.StylizedSegment] | None = None
+    max_chars = 0 if config.style_with_llm else config.subtitle_max_chars
+
+    if config.subtitle_mode != "off" or need_video:
         subtitle_segments = subtitles.align_segments_to_audio(
             state.stylized_segments, state.synthesized_paths, placements=state.placements
         )
-        max_chars = 0 if config.style_with_llm else config.subtitle_max_chars
+
+    if config.subtitle_mode != "off" and subtitle_segments is not None:
+        reporter.log("字幕ファイルを生成しています...")
+        step_start = reporter.now()
         subtitle_paths = subtitles.write_subtitles(
             subtitle_segments,
             out_dir=out_dir,
@@ -759,6 +778,8 @@ def _step_finalize(state: PipelineState) -> None:
     output_mp3 = out_dir / f"{state.output_base_name}.mp3"
     temp_wav = run_dir / f"{state.output_base_name}.wav" if config.want_mp3 else output_wav
 
+    need_wav_output = not config.want_mp3 or need_video
+
     if config.want_mp3:
         reporter.log(f"mp3 を生成しています -> {output_mp3}")
         step_start = reporter.now()
@@ -770,11 +791,70 @@ def _step_finalize(state: PipelineState) -> None:
             env_info=env_info,
         )
         state.complete_step("mp3 生成が完了しました。", step_start)
-        if temp_wav.exists():
+        if need_wav_output and not output_wav.exists():
+            temp_wav.replace(output_wav)
+        elif temp_wav.exists():
             temp_wav.unlink()
     else:
         if not output_wav.exists():
             temp_wav.replace(output_wav)
+
+    ass_path: pathlib.Path | None = None
+    audio_for_video = output_wav if output_wav.exists() else temp_wav
+
+    if need_video:
+        if subtitle_segments is None:
+            raise RuntimeError("動画生成に必要な字幕データを準備できませんでした。")
+        reporter.log("動画用の字幕ファイルを生成しています...")
+        ass_path = run_dir / f"{state.output_base_name}.ass"
+        subtitles.write_ass_subtitles(
+            subtitle_segments,
+            path=ass_path,
+            characters={char1.id: char1, char2.id: char2},
+            colors=colors,
+            font=config.subtitle_font,
+            font_size=config.subtitle_font_size,
+            resolution=(config.video_width, config.video_height),
+            max_chars_per_line=max_chars,
+        )
+        reporter.log(f"字幕ASSを生成しました -> {ass_path.name}")
+
+    if need_video and ass_path is not None:
+        if not audio_for_video.exists():
+            raise FileNotFoundError(append_env_details("動画出力用の音声ファイルが見つかりません。", env_info))
+        if config.output_mp4:
+            target = out_dir / f"{state.output_base_name}.mp4"
+            reporter.log(f"mp4 を生成しています -> {target}")
+            step_start = reporter.now()
+            video.render_video_with_subtitles(
+                audio=audio_for_video,
+                subtitles=ass_path,
+                output=target,
+                ffmpeg_path=config.ffmpeg_path,
+                width=config.video_width,
+                height=config.video_height,
+                fps=config.video_fps,
+                transparent=False,
+                env_info=env_info,
+            )
+            state.complete_step("mp4 生成が完了しました。", step_start)
+
+        if config.output_mov:
+            target = out_dir / f"{state.output_base_name}.mov"
+            reporter.log(f"mov を生成しています -> {target}")
+            step_start = reporter.now()
+            video.render_video_with_subtitles(
+                audio=audio_for_video,
+                subtitles=ass_path,
+                output=target,
+                ffmpeg_path=config.ffmpeg_path,
+                width=config.video_width,
+                height=config.video_height,
+                fps=config.video_fps,
+                transparent=True,
+                env_info=env_info,
+            )
+            state.complete_step("mov 生成が完了しました。", step_start)
 
     if not config.keep_work:
         reporter.log("作業ディレクトリをクリーンアップしています...")

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import pathlib
 import wave
-from typing import Dict, List, Literal, Sequence
+from typing import Dict, List, Literal, Sequence, Tuple
 
+from . import utils
 from .style_convert import StylizedSegment
 from .characters import CharacterMeta
 
@@ -236,3 +237,92 @@ def _explode_segments(
                 )
             )
     return exploded
+
+
+def _ass_color_from_hex(color: str, alpha: int = 0) -> str:
+    r, g, b = utils.hex_to_rgb(color)
+    alpha_clamped = max(0, min(255, alpha))
+    return f"&H{alpha_clamped:02X}{b:02X}{g:02X}{r:02X}"
+
+
+def _format_ass_timestamp(seconds: float) -> str:
+    if seconds < 0:
+        seconds = 0.0
+    total_centis = int(round(seconds * 100))
+    hours, rem = divmod(total_centis, 360_000)
+    minutes, rem = divmod(rem, 6_000)
+    secs, centis = divmod(rem, 100)
+    return f"{hours:d}:{minutes:02d}:{secs:02d}.{centis:02d}"
+
+
+def _escape_ass_text(text: str) -> str:
+    return text.replace("\\", r"\\").replace("{", r"\\{").replace("}", r"\\}").replace("\n", r"\\N")
+
+
+def write_ass_subtitles(
+    segments: Sequence[StylizedSegment],
+    *,
+    path: pathlib.Path,
+    characters: Dict[str, CharacterMeta],
+    colors: Dict[str, str],
+    font: str | None,
+    font_size: int,
+    resolution: Tuple[int, int],
+    max_chars_per_line: int | None = None,
+) -> pathlib.Path:
+    """StylizedSegment から ASS 字幕ファイルを生成する。"""
+
+    play_res_x, play_res_y = resolution
+    font_name = font or "Noto Sans JP"
+
+    exploded = _explode_segments(
+        segments,
+        characters,
+        include_label=True,
+        max_chars=max_chars_per_line,
+    )
+
+    primary_default = colors.get("default", "#ffffff")
+    outline_color = _ass_color_from_hex("#000000", alpha=0x64)
+    shadow_color = _ass_color_from_hex("#000000", alpha=0x96)
+
+    script_info = [
+        "[Script Info]",
+        "ScriptType: v4.00+",
+        "ScaledBorderAndShadow: yes",
+        f"PlayResX: {play_res_x}",
+        f"PlayResY: {play_res_y}",
+        "",
+    ]
+
+    styles = [
+        "[V4+ Styles]",
+        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
+    ]
+
+    default_style = _ass_color_from_hex(primary_default)
+    styles.append(
+        f"Style: default,{font_name},{font_size},{default_style},&H00FFFFFF,{outline_color},{shadow_color},0,0,0,0,100,100,0,0,1,2,0,2,20,20,40,1"
+    )
+
+    for char_id, meta in characters.items():
+        primary = _ass_color_from_hex(colors.get(char_id, primary_default))
+        style_name = meta.id or char_id or "default"
+        styles.append(
+            f"Style: {style_name},{font_name},{font_size},{primary},&H00FFFFFF,{outline_color},{shadow_color},0,0,0,0,100,100,0,0,1,2,0,2,20,20,40,1"
+        )
+
+    events = [
+        "[Events]",
+        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+    ]
+
+    for seg in exploded:
+        style_name = seg.character if seg.character in characters else "default"
+        text = _escape_ass_text(seg.text)
+        events.append(
+            "Dialogue: 0," f"{_format_ass_timestamp(seg.start)}," f"{_format_ass_timestamp(seg.end)}," f"{style_name},,0,0,0,,{text}"
+        )
+
+    path.write_text("\n".join(script_info + styles + events) + "\n", encoding="utf-8")
+    return path
