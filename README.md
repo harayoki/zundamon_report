@@ -192,7 +192,7 @@ python -m reportvox input.mp4 --speakers auto --mp3
 - --subtitles {off,all,split}: SRT 字幕の出力モード。
 - --subtitle-max-chars: 字幕1枚あたりの最大文字数（デフォルト 25、0 で無制限）。
 - --subtitle-font: 動画用ASS字幕に使用するフォント名（libass で解決可能なもの）。
-- --subtitle-font-size: 動画用ASS字幕のフォントサイズ。デフォルトは 48 pt。
+- --subtitle-font-size: 動画用ASS字幕のフォントサイズ。デフォルトは 96 pt。
 - --review-transcript: 文字起こし結果を保存したあとで処理を停止し、transcript.json を手動修正したうえで表示される再開コマンドを実行して続行できるようにする。
 - --review-transcript-llm: 文字起こし結果を保存したあと、LLM で明らかな誤字脱字を自動校正してから続行する（--llm でバックエンド指定）。
 - --mp4: 字幕焼き込み済みの mp4 を生成。
