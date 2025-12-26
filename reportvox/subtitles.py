@@ -24,12 +24,13 @@ def _format_timestamp(seconds: float) -> str:
 
 
 def _build_line_text(segment: StylizedSegment, characters: Dict[str, CharacterMeta], *, include_label: bool) -> str:
-    if not include_label:
-        return segment.text
-    meta = characters.get(segment.character)
-    label = meta.display_name if meta else segment.character
-    if label:
-        return f"【{label}】{segment.text}"
+    """字幕用に文字列を整形する際に先頭ラベルを除去する。"""
+
+    if include_label and segment.text.startswith("【"):
+        end_idx = segment.text.find("】")
+        if end_idx != -1:
+            return segment.text[end_idx + 1 :]
+
     return segment.text
 
 
