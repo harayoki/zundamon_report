@@ -309,22 +309,17 @@ def _spread_default_colors(color1: str, color2: str, *, threshold: float = 90.0)
     if _rgb_distance(base1, base2) >= threshold:
         return color1, color2, False
 
-    bright_first = _luminance(base1) >= _luminance(base2)
-    brighter = base1 if bright_first else base2
-    darker = base2 if bright_first else base1
-
     def _lighten(rgb: tuple[int, int, int], amount: int = 28) -> tuple[int, int, int]:
         return tuple(min(255, value + amount) for value in rgb)  # type: ignore[return-value]
 
     def _darken(rgb: tuple[int, int, int], amount: int = 28) -> tuple[int, int, int]:
         return tuple(max(0, value - amount) for value in rgb)  # type: ignore[return-value]
 
-    adjusted_bright = _lighten(brighter)
-    adjusted_dark = _darken(darker)
+    base2_luminance = _luminance(base2)
+    base1_luminance = _luminance(base1)
+    adjusted_second = _lighten(base2) if base2_luminance <= base1_luminance else _darken(base2)
 
-    if bright_first:
-        return utils.rgb_to_hex(adjusted_bright), utils.rgb_to_hex(adjusted_dark), True
-    return utils.rgb_to_hex(adjusted_dark), utils.rgb_to_hex(adjusted_bright), True
+    return color1, utils.rgb_to_hex(adjusted_second), True
 
 
 def _map_speakers(
@@ -388,8 +383,8 @@ def _ensure_character_colors(
         spread1, spread2, adjusted = _spread_default_colors(color1, color2)
         if adjusted:
             reporter.log(
-                "メインカラーが近いため差を広げました: "
-                f"{char1.display_name} {color1} -> {spread1}, {char2.display_name} {color2} -> {spread2}"
+                "メインカラーが近いため二人目のカラーを調整しました: "
+                f"{char2.display_name} {color2} -> {spread2} (基準 {char1.display_name} {color1})"
             )
             color1, color2 = spread1, spread2
 
