@@ -129,7 +129,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--llm",
         choices=["none", "openai", "ollama"],
         default="none",
-        help="口調変換に使う LLM バックエンド（none は変換なし）。Gemini CLI は現在無効化中です。",
+        help="口調変換に使う LLM バックエンド（none は変換なし）。",
     )
     parser.add_argument(
         "--ollama-host",

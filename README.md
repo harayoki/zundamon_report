@@ -104,9 +104,6 @@ python -m reportvox input.wav --llm local --ollama-model gemma:2b
 python -m reportvox input.wav --review-transcript-llm --llm local
 ```
 
-### ローカル Gemini CLI での校正について
-以前は `--llm gemini` でローカルの Gemini CLI を使った校正に対応していましたが、現在は機能を無効化しています。再度利用可能になるまでは、OpenAI もしくは Ollama バックエンドをご利用ください。
-
 ### VOICEVOX Engine の起動
 
 本ツールはVOICEVOXアプリケーションではなく、VOICEVOX Engine（コアとなる合成エンジン）と連携します。
