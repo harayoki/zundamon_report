@@ -199,6 +199,7 @@ python -m reportvox input.mp4 --speakers auto --mp3
 - --output-name: 出力ファイル名のベース（拡張子不要）。mp3/字幕にも同名を適用。
 - --ffmpeg-path: ffmpeg 実行ファイルへのパス。
 - -f, --force: 出力の上書き確認をスキップ。
+- --force-transcribe: 文字起こしキャッシュを無視して Whisper による文字起こしをやり直します。
 - --resume <run_id>: 中断した工程から再開。
 - --resume-from: --resume と併用し、指定したステップから再開。
 - --keep-work: work/<run_id> を削除せず保持（開発/再出力向け）。

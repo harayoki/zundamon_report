@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import difflib
+import hashlib
 import json
 import math
 import os
 import pathlib
+import re
 import shutil
 import sys
 import time
@@ -81,6 +83,29 @@ def _ensure_paths() -> tuple[pathlib.Path, pathlib.Path]:
     work_dir.mkdir(exist_ok=True)
     out_dir.mkdir(exist_ok=True)
     return work_dir, out_dir
+
+
+def _slugify_for_cache(path: pathlib.Path) -> str:
+    base = path.stem or "audio"
+    safe = re.sub(r"[^0-9A-Za-z._-]+", "_", base)
+    digest = hashlib.sha1(str(path.resolve()).encode("utf-8")).hexdigest()[:10]
+    return f"{safe}_{digest}"
+
+
+def _resolve_transcription_cache_path(config: PipelineConfig, out_dir: pathlib.Path) -> pathlib.Path | None:
+    if config.input_audio is None:
+        return None
+    cache_dir = out_dir / "transcripts" / config.whisper_model
+    return cache_dir / f"{_slugify_for_cache(config.input_audio)}.json"
+
+
+def _get_mtime(path: pathlib.Path | None) -> float | None:
+    if path is None:
+        return None
+    try:
+        return path.stat().st_mtime
+    except FileNotFoundError:
+        return None
 
 
 def _resolve_output_stem(config: PipelineConfig, input_path: pathlib.Path) -> str:
@@ -559,21 +584,50 @@ def _step_transcribe(state: PipelineState) -> None:
     config = state.config
     reporter = state.reporter
     run_dir = state.run_dir
+    out_dir = state.out_dir
     env_info = state.env_info
     resume = config.resume_run_id is not None
 
     transcript_path = run_dir / "transcript.json"
+    cache_path = _resolve_transcription_cache_path(config, out_dir)
     step_start = reporter.now()
+    cached_result: transcribe.TranscriptionResult | None = None
+
+    if not resume and cache_path and cache_path.exists() and not config.force_transcribe:
+        audio_mtime = _get_mtime(config.input_audio or state.normalized_input_path)
+        cache_mtime = _get_mtime(cache_path)
+        if cache_mtime is not None and (audio_mtime is None or cache_mtime >= audio_mtime):
+            try:
+                cache_label = str(cache_path.relative_to(out_dir))
+            except ValueError:
+                cache_label = str(cache_path)
+            reporter.log(f"キャッシュ済みの文字起こしを使用します -> {cache_label}")
+            cached_json = cache_path.read_text(encoding="utf-8")
+            transcript_path.write_text(cached_json, encoding="utf-8")
+            cached_result = _load_transcription(cache_path)
+
     if resume and transcript_path.exists():
         reporter.log("既存の文字起こし結果を読み込みます...")
         whisper_result = _load_transcription(transcript_path)
     else:
-        reporter.log(f"Whisper ({config.whisper_model}) で文字起こし中です... この処理は数分かかる場合があります。")
-        whisper_result = transcribe.transcribe_audio(
-            state.normalized_input_path, model_size=config.whisper_model, env_info=env_info
-        )
-        transcript_path.write_text(json.dumps(whisper_result.as_json(), ensure_ascii=False, indent=2), encoding="utf-8")
-        reporter.log("文字起こしが完了し保存しました。")
+        if cached_result:
+            whisper_result = cached_result
+        else:
+            reporter.log(f"Whisper ({config.whisper_model}) で文字起こし中です... この処理は数分かかる場合があります。")
+            whisper_result = transcribe.transcribe_audio(
+                state.normalized_input_path, model_size=config.whisper_model, env_info=env_info
+            )
+            transcript_json = json.dumps(whisper_result.as_json(), ensure_ascii=False, indent=2)
+            transcript_path.write_text(transcript_json, encoding="utf-8")
+            reporter.log("文字起こしが完了し保存しました。")
+            if cache_path:
+                cache_path.parent.mkdir(parents=True, exist_ok=True)
+                cache_path.write_text(transcript_json, encoding="utf-8")
+                try:
+                    cache_label = str(cache_path.relative_to(out_dir))
+                except ValueError:
+                    cache_label = str(cache_path)
+                reporter.log(f"文字起こし結果をキャッシュしました -> {cache_label}")
         if config.review_transcript == "manual":
             reporter.log("transcript.json を開いて明らかな誤字脱字を修正できます。修正後、次のコマンドで再開してください。")
             reporter.log(f"python -m reportvox --resume {state.run_id}")
