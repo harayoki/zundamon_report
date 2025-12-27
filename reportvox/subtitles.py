@@ -94,6 +94,23 @@ def _split_text(text: str, include_label: bool, *, max_chars: int | None = None)
     return chunks
 
 
+def merge_subtitle_segments(segments: Sequence[StylizedSegment]) -> list[StylizedSegment]:
+    """複数話者の字幕セグメントを時系列で統合する。"""
+
+    merged = [
+        StylizedSegment(
+            start=seg.start,
+            end=seg.end,
+            text=seg.text,
+            speaker=seg.speaker,
+            character=seg.character,
+        )
+        for seg in segments
+    ]
+
+    return sorted(merged, key=lambda s: (s.start, s.end))
+
+
 def write_subtitles(
     segments: Sequence[StylizedSegment],
     *,
