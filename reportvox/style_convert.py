@@ -77,10 +77,10 @@ def _llm_transform_batch(
         "あなたは、与えられたキャラクターになりきって文章のスタイルを変換する、プロの日本語文体アシスタントです。\n"
         "以下のルールを厳密に守ってください:\n"
         "- 応答は、入力行を同じ順序・同じ行数で並べた変換後の日本語のみを含めてください。\n"
+        "- 各入力行を1行のまま返し、改行で分割・結合しないでください。\n"
         "- 説明、前置き、番号、余計な装飾や記号は不要です。\n"
         "- 元の文章の意味、固有名詞、専門用語を絶対に変えないでください。\n"
         "- 英語に翻訳しないでください。\n"
-        "- 1行が長い場合は、同じ行の中で自然に区切れる箇所で改行を入れても構いません。\n"
     )
 
     user_prompt = (
@@ -127,10 +127,10 @@ def _llm_transform(
         "あなたは、与えられたキャラクターになりきって文章のスタイルを変換する、プロの日本語文体アシスタントです。\n"
         "以下のルールを厳密に守ってください:\n"
         "- 応答は、変換後の日本語の文章のみを含めてください。\n"
+        "- 1行のまま出力し、改行で分割・結合しないでください。\n"
         "- 説明、前置き、言い訳、追加のテキストは一切不要です。\n"
         "- 元の文章の意味、固有名詞、専門用語を絶対に変えないでください。\n"
         "- 英語に翻訳しないでください。\n"
-        "- 文章が長い場合（目安として50文字以上）、文脈が自然に区切れる箇所で複数の短い文に分割し、各文を改行して出力してください。\n"
     )
     user_prompt = (
         f"キャラクター「{meta.display_name or meta.id}」の話し方を参考に、以下の文章を自然な話し言葉に変換してください。\n"
@@ -160,8 +160,9 @@ def apply_style(
     inserted: set[str] = set()
     char_map = {char1.id: char1, char2.id: char2}
     llm_results: dict[int, list[str]] = {}
+    use_batch_llm = config.style_with_llm and config.llm_backend not in {"none", "gemini"}
 
-    if config.style_with_llm and config.llm_backend not in {"none", "gemini"}:
+    if use_batch_llm:
         for character_id, meta in char_map.items():
             indexes = [idx for idx, seg in enumerate(segments) if (seg.character or char1.id) == character_id]
             if not indexes:
@@ -177,8 +178,9 @@ def apply_style(
         meta = char_map.get(seg.character or char1.id, char1)
 
         # LLM変換とヒューリスティックな口癖挿入を適用
-        texts = llm_results.get(idx)
-        if texts is None:
+        if use_batch_llm:
+            texts = llm_results.get(idx, [seg.text])
+        else:
             texts = _llm_transform(seg.text, meta, config, prompt_logger=prompt_logger)
         if len(texts) == 1:
             # LLMが分割しなかった場合は、ヒューリスティックな口癖挿入を試みる
