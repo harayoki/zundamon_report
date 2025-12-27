@@ -127,7 +127,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--llm",
-        choices=["none", "openai", "ollama", "gemini"],
+        choices=["none", "openai", "ollama"],
         default="none",
         help="口調変換に使う LLM バックエンド（none は変換なし）。",
     )
