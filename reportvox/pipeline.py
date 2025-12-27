@@ -1182,8 +1182,10 @@ def _decide_zunda_jobs(
     )
 
     prompt_log_path: pathlib.Path | None = None
+    response_log_path: pathlib.Path | None = None
     if prompt_log_dir is not None:
         prompt_log_path = prompt_log_dir / "zunda_jobs_prompt.txt"
+        response_log_path = prompt_log_dir / "zunda_jobs_response.txt"
         prompt_content = (
             "[System]\n"
             f"{system_prompt.strip()}\n\n"
@@ -1202,6 +1204,16 @@ def _decide_zunda_jobs(
         data = json.loads(content)
         senior_job = str(data.get("zunda_senior_job", "")).strip()
         junior_job = str(data.get("zunda_junior_job", "")).strip()
+    except json.JSONDecodeError as exc:
+        reporter.log(f"ずんだもんの職業応答を JSON として解釈できませんでした: {exc}")
+        preview = (content or "").strip()
+        if preview:
+            preview = preview[:200].replace("\n", " ")
+            reporter.log(f"LLM 応答の先頭部分: {preview}")
+        if response_log_path is not None and content is not None:
+            response_log_path.write_text(content, encoding="utf-8")
+            reporter.log(f"LLM 応答全文を {response_log_path.name} に保存しました。")
+        return None
     except Exception as exc:
         reporter.log(f"ずんだもんの職業生成に失敗したため、省略します: {exc}")
         return None
