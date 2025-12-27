@@ -41,6 +41,23 @@ pip install "numpy<2"
 ```
 
 ## 依存サービス
+### OpenAI API で利用するモデルの指定
+LLM バックエンドに `openai` を選択した場合、呼び出すモデルは環境変数 `OPENAI_MODEL` で指定できます。未設定時のデフォルトは **gpt-4o-mini** です。
+
+例: 高精度な `gpt-4o` を使う場合
+
+```bash
+export OPENAI_MODEL=gpt-4o
+```
+
+主な選択肢（OpenAI 側の提供状況に応じて利用可否が変わるため、最新情報は公式ドキュメントを確認してください）:
+
+- `gpt-4o-mini`（デフォルト / 高速・低コスト）
+- `gpt-4o`（高精度）
+- `gpt-4.1` / `gpt-4.1-mini`（最新系モデル。利用可否は API の提供状況を参照）
+
+`OPENAI_API_KEY` と合わせて設定することで、`--llm openai` 実行時に希望するモデルで推論できます。
+
 ### pyannote.audio の認証
 話者分離機能（--speakers auto/2）を利用するには、Hugging Face の Classic Token (Read) が必要です。
 
