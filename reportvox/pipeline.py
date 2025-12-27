@@ -937,7 +937,7 @@ def _step_finalize(state: PipelineState) -> None:
             subtitle_segments_for_files = base_subtitle_segments
         if need_video:
             # 動画に埋め込む字幕は、ファイル出力モードに関わらず全話者を統合したデータを使う
-            subtitle_segments_for_video = base_subtitle_segments
+            subtitle_segments_for_video = subtitles.merge_subtitle_segments(base_subtitle_segments)
 
     if config.subtitle_mode != "off" and subtitle_segments_for_files is not None:
         reporter.log("字幕ファイルを生成しています...")

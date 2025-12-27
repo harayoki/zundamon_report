@@ -92,10 +92,6 @@ def render_video_with_subtitles(
             raise ValueError(append_env_details("画像の開始秒より終了秒が短くなっています。設定を見直してください。", env_info))
 
     base_color = "black@0" if transparent else "black"
-    subtitle_filter = _escape_filter_path(subtitles)
-    subtitle_output = "[vout]" if not overlay_list else "[vbase]"
-    filter_parts = [f"[0:v]subtitles={subtitle_filter}{subtitle_output}"]
-
     x_expr = str(image_position[0]) if image_position else "(W-w)/2"
     vertical_offset_px = 10
     y_expr = (
@@ -130,7 +126,8 @@ def render_video_with_subtitles(
                 }
             )
 
-    last_stream = subtitle_output
+    filter_parts: list[str] = []
+    last_stream = "[0:v]"
     for idx, (path, start, end) in enumerate(overlay_list):
         input_label = f"[{idx + 2}:v]"
         scaled_label = input_label
@@ -149,7 +146,7 @@ def render_video_with_subtitles(
                 f"{input_label}scale=ceil(iw*{image_scale}):ceil(ih*{image_scale})[img{idx}]"
             )
             scaled_label = f"[img{idx}]"
-        output_label = "[vout]" if idx == len(overlay_list) - 1 else f"[vimg{idx}]"
+        output_label = "[v_pre_sub]" if idx == len(overlay_list) - 1 else f"[vimg{idx}]"
         start_ts = max(0.0, start)
         end_ts = max(0.0, end)
         filter_parts.append(
@@ -157,6 +154,9 @@ def render_video_with_subtitles(
             f"{output_label}"
         )
         last_stream = output_label
+
+    subtitle_filter = _escape_filter_path(subtitles)
+    filter_parts.append(f"{last_stream}subtitles={subtitle_filter}[vout]")
 
     filter_complex = ";".join(filter_parts)
 
