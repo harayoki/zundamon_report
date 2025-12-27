@@ -225,3 +225,67 @@ def render_video_with_subtitles(
         error_output = exc.stderr or ""
         message = f"ffmpeg による動画生成に失敗しました。ffmpegからのエラー:\n{error_output}"
         raise RuntimeError(append_env_details(message, env_info)) from exc
+
+
+def remux_subtitle_tracks(
+    source: pathlib.Path,
+    *,
+    subtitle: pathlib.Path | None,
+    ffmpeg_path: str = "ffmpeg",
+    env_info: EnvironmentInfo | None = None,
+) -> None:
+    """動画ファイルから既存の字幕ストリームを削除し、必要に応じて統合字幕を追加する。"""
+
+    if not source.exists():
+        raise FileNotFoundError(append_env_details(f"動画ファイルが見つかりません: {source}", env_info))
+    if subtitle is not None and not subtitle.exists():
+        raise FileNotFoundError(append_env_details(f"字幕ファイルが見つかりません: {subtitle}", env_info))
+
+    tmp_output = source.with_name(source.name + ".tmp")
+
+    cmd: list[str] = [
+        ffmpeg_path,
+        "-y",
+        "-i",
+        str(source),
+    ]
+
+    if subtitle is not None:
+        cmd += ["-i", str(subtitle)]
+
+    cmd += [
+        "-map",
+        "0:v",
+        "-map",
+        "0:a?",
+        "-c:v",
+        "copy",
+        "-c:a",
+        "copy",
+    ]
+
+    if subtitle is not None:
+        cmd += [
+            "-map",
+            "1:0",
+            "-c:s",
+            "mov_text",
+        ]
+
+    cmd.append(str(tmp_output))
+
+    try:
+        subprocess.run(
+            cmd,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+        )
+    except subprocess.CalledProcessError as exc:
+        error_output = exc.stderr or ""
+        message = f"ffmpeg での字幕差し替えに失敗しました。ffmpegからのエラー:\n{error_output}"
+        raise RuntimeError(append_env_details(message, env_info)) from exc
+
+    tmp_output.replace(source)
