@@ -1008,6 +1008,9 @@ def _prepend_introductions(
     char2: characters.CharacterMeta,
     config: PipelineConfig,
 ) -> list[style_convert.StylizedSegment]:
+    if not config.prepend_intro:
+        return list(segments)
+
     intro_segments: list[style_convert.StylizedSegment] = []
 
     # 音声に登場するキャラクターとスピーカーラベルのマッピングを作成

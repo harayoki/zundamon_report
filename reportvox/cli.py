@@ -120,6 +120,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--intro1", default=None, help="話者1の最初の挨拶文を上書きします。")
     parser.add_argument("--intro2", default=None, help="話者2の最初の挨拶文を上書きします。")
     parser.add_argument(
+        "--no-intro",
+        action="store_false",
+        dest="prepend_intro",
+        default=True,
+        help="ずんだもんの自己紹介など、最初の挨拶文の自動挿入を無効化します。",
+    )
+    parser.add_argument(
         "--zunda-senior-job", dest="zunda_senior_job", default=None, help="ずんだもんが憧れる職業を指定（--zunda-junior-job と併用）。"
     )
     parser.add_argument(
@@ -330,6 +337,7 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
         diarization_threshold=args.diarization_threshold,
         intro1=args.intro1,
         intro2=args.intro2,
+        prepend_intro=args.prepend_intro,
         video_images=video_images,
         video_image_scale=args.video_image_scale,
         video_image_position=args.video_image_pos,
