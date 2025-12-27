@@ -99,6 +99,14 @@ def _resolve_transcription_cache_path(config: PipelineConfig, out_dir: pathlib.P
     return cache_dir / f"{_slugify_for_cache(config.input_audio)}.json"
 
 
+def _resolve_diarization_cache_path(config: PipelineConfig, out_dir: pathlib.Path) -> pathlib.Path | None:
+    if config.input_audio is None:
+        return None
+    threshold_label = str(config.diarization_threshold).replace(".", "_")
+    cache_dir = out_dir / "diarization" / f"{config.speakers}_thr{threshold_label}"
+    return cache_dir / f"{_slugify_for_cache(config.input_audio)}.json"
+
+
 def _get_mtime(path: pathlib.Path | None) -> float | None:
     if path is None:
         return None
@@ -665,32 +673,59 @@ def _step_diarize(state: PipelineState) -> None:
     config = state.config
     reporter = state.reporter
     run_dir = state.run_dir
+    out_dir = state.out_dir
     env_info = state.env_info
     resume = config.resume_run_id is not None
 
     hf_token = state.hf_token
     diarization_path = run_dir / "diarization.json"
+    cache_path = _resolve_diarization_cache_path(config, out_dir)
     step_start = reporter.now()
+    cached_result: list[diarize.DiarizedSegment] | None = None
+
+    if not resume and cache_path and cache_path.exists() and not config.force_diarize:
+        audio_mtime = _get_mtime(config.input_audio or state.normalized_input_path)
+        cache_mtime = _get_mtime(cache_path)
+        if cache_mtime is not None and (audio_mtime is None or cache_mtime >= audio_mtime):
+            try:
+                cache_label = str(cache_path.relative_to(out_dir))
+            except ValueError:
+                cache_label = str(cache_path)
+            reporter.log(f"キャッシュ済みの話者分離を使用します -> {cache_label}")
+            diarization_path.write_text(cache_path.read_text(encoding="utf-8"), encoding="utf-8")
+            cached_result = _load_diarization(cache_path)
+
     if resume and diarization_path.exists():
         reporter.log(f"既存の話者分離結果を読み込みます ({config.speakers})...")
         diarization = _load_diarization(diarization_path)
     else:
-        reporter.log(f"話者分離を実行しています ({config.speakers})...")
-        with diarize.torchcodec_warning_detector() as torchcodec_warning:
-            diarization = diarize.diarize_audio(
-                state.normalized_input_path,
-                mode=config.speakers,
-                hf_token=hf_token,
-                work_dir=run_dir,
-                env_info=env_info,
-                threshold=config.diarization_threshold,
-            )
-        if torchcodec_warning.detected:
-            reporter.log(
-                "TorchCodec/libtorchcodec に関する警告を検出しました。FFmpeg の共有DLLや TorchCodec の互換バージョンが不足していると出ることがあります。"
-                " 警告だけならそのまま続行しても構いませんが、話者分離に失敗する場合は README の TorchCodec 対処を確認してください。"
-            )
-        diarize.save_diarization(diarization, diarization_path)
+        if cached_result:
+            diarization = cached_result
+        else:
+            reporter.log(f"話者分離を実行しています ({config.speakers})...")
+            with diarize.torchcodec_warning_detector() as torchcodec_warning:
+                diarization = diarize.diarize_audio(
+                    state.normalized_input_path,
+                    mode=config.speakers,
+                    hf_token=hf_token,
+                    work_dir=run_dir,
+                    env_info=env_info,
+                    threshold=config.diarization_threshold,
+                )
+            if torchcodec_warning.detected:
+                reporter.log(
+                    "TorchCodec/libtorchcodec に関する警告を検出しました。FFmpeg の共有DLLや TorchCodec の互換バージョンが不足していると出ることがあります。"
+                    " 警告だけならそのまま続行しても構いませんが、話者分離に失敗する場合は README の TorchCodec 対処を確認してください。"
+                )
+            diarize.save_diarization(diarization, diarization_path)
+            if cache_path:
+                cache_path.parent.mkdir(parents=True, exist_ok=True)
+                diarize.save_diarization(diarization, cache_path)
+                try:
+                    cache_label = str(cache_path.relative_to(out_dir))
+                except ValueError:
+                    cache_label = str(cache_path)
+                reporter.log(f"話者分離結果をキャッシュしました -> {cache_label}")
     state.complete_step("話者分離工程が完了しました。", step_start)
     state.diarization_result = diarization
 
