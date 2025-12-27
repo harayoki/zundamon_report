@@ -321,7 +321,7 @@ def write_ass_subtitles(
         segments,
         characters,
         include_label=True,
-        max_chars=max_chars_per_line,
+        max_chars=(None if is_portrait else max_chars_per_line),
     )
 
     primary_default = colors.get("default", "#ffffff")
