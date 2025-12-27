@@ -97,7 +97,12 @@ def render_video_with_subtitles(
     filter_parts = [f"[0:v]subtitles={subtitle_filter}{subtitle_output}"]
 
     x_expr = str(image_position[0]) if image_position else "(W-w)/2"
-    y_expr = str(image_position[1]) if image_position else "H*0.58 - h/2"
+    vertical_offset_px = 10
+    y_expr = (
+        str(image_position[1])
+        if image_position
+        else f"H*0.58 - h/2 + {vertical_offset_px}"
+    )
 
     overlay_transforms: list[dict[str, float]] = []
     if overlay_list and image_position is None:
@@ -114,7 +119,7 @@ def render_video_with_subtitles(
             scaled_w = math.ceil(src_w * scale_factor)
             scaled_h = math.ceil(src_h * scale_factor)
             x_pos = (width - scaled_w) / 2
-            y_pos = target_bottom - scaled_h
+            y_pos = target_bottom - scaled_h + vertical_offset_px
 
             overlay_transforms.append(
                 {
