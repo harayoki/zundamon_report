@@ -214,8 +214,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--subtitle-font-size",
         type=_positive_nonzero_int,
-        default=96,
-        help="動画字幕のフォントサイズ (pt)。デフォルトは 96。",
+        default=84,
+        help="動画字幕のフォントサイズ (pt)。デフォルトは 84。",
     )
     parser.add_argument(
         "--video-width",

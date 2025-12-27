@@ -43,7 +43,7 @@ class PipelineConfig:
     subtitle_mode: SubtitleMode = "off"
     subtitle_max_chars: int = 25
     subtitle_font: Optional[str] = None
-    subtitle_font_size: int = 48
+    subtitle_font_size: int = 42
     video_width: int = 1080
     video_height: int = 1920
     video_fps: int = 24

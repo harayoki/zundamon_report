@@ -274,7 +274,13 @@ def _format_ass_timestamp(seconds: float) -> str:
 
 
 def _escape_ass_text(text: str) -> str:
-    return text.replace("\\", r"\\").replace("{", r"\\{").replace("}", r"\\}").replace("\n", r"\\N")
+    normalized = text.replace("\\n", "\n").replace("\\N", "\n")
+    return (
+        normalized.replace("\\", r"\\")
+        .replace("{", r"\\{")
+        .replace("}", r"\\}")
+        .replace("\n", r"\\N")
+    )
 
 
 def _wrap_ass_text_to_two_lines(text: str, *, include_label: bool, max_chars: int | None, is_portrait: bool) -> str:
@@ -344,14 +350,14 @@ def write_ass_subtitles(
 
     default_style = _ass_color_from_hex(primary_default)
     styles.append(
-        f"Style: default,{font_name},{font_size},{default_style},&H00FFFFFF,{outline_color},{shadow_color},0,0,0,0,100,100,0,0,1,2,0,2,20,20,40,1"
+        f"Style: default,{font_name},{font_size},{default_style},&H00FFFFFF,{outline_color},{shadow_color},0,0,0,0,100,100,0,0,1,3,0,2,20,20,40,1"
     )
 
     for char_id, meta in characters.items():
         primary = _ass_color_from_hex(colors.get(char_id, primary_default))
         style_name = meta.id or char_id or "default"
         styles.append(
-            f"Style: {style_name},{font_name},{font_size},{primary},&H00FFFFFF,{outline_color},{shadow_color},0,0,0,0,100,100,0,0,1,2,0,2,20,20,40,1"
+            f"Style: {style_name},{font_name},{font_size},{primary},&H00FFFFFF,{outline_color},{shadow_color},0,0,0,0,100,100,0,0,1,3,0,2,20,20,40,1"
         )
 
     events = [
