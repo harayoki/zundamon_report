@@ -227,6 +227,8 @@ def _llm_review_transcription(
         f"{json.dumps(result.as_json(), ensure_ascii=False)}"
     )
     content = chat_completion(system_prompt=system_prompt, user_prompt=user_prompt, config=config, env_info=env_info)
+    # print(system_prompt)
+    # print(user_prompt)
     try:
         data = json.loads(content)
     except json.JSONDecodeError as exc:
@@ -234,6 +236,8 @@ def _llm_review_transcription(
 
     segments_in = data.get("segments")
     if not isinstance(segments_in, list) or len(segments_in) != len(result.segments):
+        print(segments_in)
+        print(result.segments)
         raise RuntimeError(
             append_env_details("LLM の応答形式が不正です（segments の数が一致しません）。", env_info)
         )
