@@ -158,15 +158,19 @@ def _estimate_total_duration(segments: Sequence[style_convert.StylizedSegment]) 
 
 
 def _build_target_durations(
-    segments: Sequence[style_convert.StylizedSegment]
+    segments: Sequence[style_convert.StylizedSegment],
+    *,
+    max_pause: float,
 ) -> list[float]:
     durations: list[float] = []
     for idx, seg in enumerate(segments):
         next_start = segments[idx + 1].start if idx + 1 < len(segments) else seg.end
         gap_to_next = max(0.0, next_start - seg.start)
         segment_length = max(0.0, seg.end - seg.start)
-        base = max(gap_to_next, segment_length, 0.05)
-        durations.append(max(base, 0.05))
+        silence_to_next = max(0.0, gap_to_next - segment_length)
+        clamped_gap = segment_length + min(silence_to_next, max_pause)
+        base = max(clamped_gap, segment_length, 0.05)
+        durations.append(base)
     return durations
 
 
@@ -887,7 +891,7 @@ def _step_concatenate(state: PipelineState) -> None:
     env_info = state.env_info
 
     target_durations = _build_target_durations(
-        state.stylized_segments
+        state.stylized_segments, max_pause=config.max_pause_between_segments
     )
 
     reporter.log("セグメントをタイムラインに配置しています...")
