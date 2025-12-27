@@ -164,38 +164,47 @@ python -m reportvox input.mp4 --speakers auto --mp3
 ```
 
 ## 主なオプション
+- --voicevox-url: VOICEVOX Engine のベース URL。
+- --speakers {auto,1,2}: 話者数の扱い。
+- --diarization-threshold: 話者分離のクラスタリング閾値（0.0-1.0）。値が低いほど、声質が似ている話者も別人として分離されやすくなります。デフォルトは 0.8。
 - --speaker1: 主話者に割り当てるキャラクターID。
 - --speaker2: 副話者に割り当てるキャラクターID。
+- --color1 / --color2: 話者ごとに使うカラーコード（#RRGGBB、未指定時はキャラクターのメインカラー）。
 - --intro1: 話者1の最初の挨拶文を指定します。
 - --intro2: 話者2の最初の挨拶文を指定します。
 - --no-intro: 最初の挨拶文の自動挿入を無効化します。
-- --zunda-senior-job, --zunda-junior-job: speaker1がずんだもんの場合のデフォルト挨拶を生成します（--intro1が指定されている場合はそちらが優先されます）。
-- --speakers {auto,1,2}: 話者数の扱い。
-- --diarization-threshold: 話者分離のクラスタリング閾値（0.0-1.0）。値が低いほど、声質が似ている話者も別人として分離されやすくなります。デフォルトは 0.8。
+- --zunda-senior-job, --zunda-junior-job: speaker1がずんだもんの場合のデフォルト挨拶を生成します（--intro1が指定されている場合はこちらが優先されます）。
 - --model: Whisper のモデルサイズ。
-- --voicevox-url: VOICEVOX Engine のベース URL。
 - --speed-scale: VOICEVOX での読み上げ速度（デフォルト 1.1）。発話の間隔は維持されるため、音声全体の長さはほぼ変わりません。
-- --output-name: 出力ファイル名のベース（拡張子不要）。mp3/字幕にも同名を適用。
-- -f, --force: 出力の上書き確認をスキップ。
-- --mp3: mp3 を生成（out/ には mp3 だけを出力）。
-- --bitrate: mp3 出力時のビットレート。
-- --resume <run_id>: 中断した工程から再開。
-- --keep-work: work/<run_id> を削除せず保持（開発/再出力向け）。
-- --llm {none,openai,ollama,gemini}: LLMバックエンドの指定。
+- --llm {none,openai,ollama}: LLMバックエンドの指定。
+- --style-with-llm: 口調変換で LLM を使用します (--llm でバックエンド指定)。
 - --ollama-host: Ollamaのホスト名。
 - --ollama-port: Ollamaのポート番号。
 - --ollama-model: Ollamaで使用するモデル名。デフォルトは環境変数 LOCAL_LLM_MODEL または 'llama3'。
 - --hf-token: Hugging Face Token。
-- --subtitles {off,all,split}: SRT 字幕の出力モード。
-- --subtitle-max-chars: 字幕1枚あたりの最大文字数（デフォルト 25、0 で無制限）。
-- --subtitle-font: 動画用ASS字幕に使用するフォント名（libass で解決可能なもの）。
-- --subtitle-font-size: 動画用ASS字幕のフォントサイズ。デフォルトは 96 pt。
-- --review-transcript: 文字起こし結果を保存したあとで処理を停止し、transcript.json を手動修正したうえで表示される再開コマンドを実行して続行できるようにする。
-- --review-transcript-llm: 文字起こし結果を保存したあと、LLM で明らかな誤字脱字を自動校正してから続行する（--llm でバックエンド指定）。
+- --mp3: mp3 を生成（out/ には mp3 だけを出力）。
+- --bitrate: mp3 出力時のビットレート。
 - --mp4: 字幕焼き込み済みの mp4 を生成。
 - --mov: 透明背景の mov (ProRes 4444) を生成。
 - --video-width / --video-height: 動画の解像度をピクセルで指定（デフォルト 1920x1080）。
 - --video-fps: 動画のフレームレート。デフォルト 24 fps。
+- --video-images: 動画上に順番に表示する画像ファイルのパスを指定（複数指定可）。
+- --video-image-times: 各画像の表示開始秒を指定（--video-images と同数）。未指定時は尺を等分。
+- --video-image-pos: 画像の表示位置（"X,Y"）。
+- --video-image-scale: 動画に重ねる画像の拡大率（デフォルト 0.35）。
+- --subtitles {off,all,split}: SRT 字幕の出力モード。
+- --subtitle-max-chars: 字幕1枚あたりの最大文字数（デフォルト 25、0 で無制限）。
+- --subtitle-font: 動画用ASS字幕に使用するフォント名（libass で解決可能なもの）。
+- --subtitle-font-size: 動画用ASS字幕のフォントサイズ。デフォルトは 96 pt。
+- --output-name: 出力ファイル名のベース（拡張子不要）。mp3/字幕にも同名を適用。
+- --ffmpeg-path: ffmpeg 実行ファイルへのパス。
+- -f, --force: 出力の上書き確認をスキップ。
+- --resume <run_id>: 中断した工程から再開。
+- --resume-from: --resume と併用し、指定したステップから再開。
+- --keep-work: work/<run_id> を削除せず保持（開発/再出力向け）。
+- --review-transcript: 文字起こし結果を保存したあとで処理を停止し、transcript.json を手動修正したうえで表示される再開コマンドを実行して続行できるようにする。
+- --review-transcript-llm: 文字起こし結果を保存したあと、LLM で明らかな誤字脱字を自動校正してから続行する（--llm でバックエンド指定）。
+- --skip-review-transcript: 誤字脱字の自動校正を行わずに次の工程へ進みます。
 
 ## カスタム話者・口癖の追加
 新しいキャラクターの追加や口癖の調整方法は「[キャラクター追加・口癖設定ガイド](docs/characters.md)」にまとめています。
