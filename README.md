@@ -208,7 +208,7 @@ python -m reportvox input.mp4 --speakers auto --mp3
 - --video-images: 動画上に順番に表示する画像ファイルのパスを指定（複数指定可）。
 - --video-image-times: 各画像の表示開始秒を指定（--video-images と同数）。未指定時は尺を等分。
 - --video-image-pos: 画像の表示位置（"X,Y"）。
-- --video-image-scale: 動画に重ねる画像の拡大率（デフォルト 0.35）。
+- --video-image-scale: 動画に重ねる画像の拡大率（デフォルト 0.45）。
 - --subtitles {off,all,split}: SRT 字幕の出力モード。
 - --subtitle-max-chars: 字幕1枚あたりの最大文字数（デフォルト 25、0 で無制限）。
 - --subtitle-font: 動画用ASS字幕に使用するフォント名（libass で解決可能なもの）。

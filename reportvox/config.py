@@ -58,6 +58,6 @@ class PipelineConfig:
     intro2: Optional[str] = None
     max_pause_between_segments: float = 0.2
     video_images: list[pathlib.Path] = field(default_factory=list)
-    video_image_scale: float = 0.35
+    video_image_scale: float = 0.45
     video_image_position: tuple[int, int] | None = None
     video_image_times: list[float] | None = None
