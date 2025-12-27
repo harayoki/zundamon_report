@@ -664,7 +664,23 @@ def _step_stylize(state: PipelineState) -> None:
         stylized = _load_stylized(stylized_path)
     else:
         reporter.log("口調変換と定型句の挿入を実行しています...")
-        stylized = style_convert.apply_style(mapped, char1, char2, config=config)
+        prompt_logger = None
+        prompt_log_path = run_dir / "style_llm_prompts.log"
+        if config.style_with_llm and config.llm_backend not in {"none", "gemini"}:
+            prompt_log_path.write_text("", encoding="utf-8")
+            reporter.log(f"口調変換用LLMプロンプトを {prompt_log_path.name} に記録します。")
+
+            def _log_style_prompt(system_prompt: str, user_prompt: str) -> None:
+                with prompt_log_path.open("a", encoding="utf-8") as fp:
+                    fp.write("=== Style LLM Prompt ===\n")
+                    fp.write("[System]\n")
+                    fp.write(system_prompt.strip() + "\n\n")
+                    fp.write("[User]\n")
+                    fp.write(user_prompt.strip() + "\n\n")
+
+            prompt_logger = _log_style_prompt
+
+        stylized = style_convert.apply_style(mapped, char1, char2, config=config, prompt_logger=prompt_logger)
         stylized = _prepend_introductions(stylized, char1=char1, char2=char2, config=config)
         _save_stylized(stylized, stylized_path)
         _log_style_diff(mapped, stylized, run_dir / "style_diff.log")
