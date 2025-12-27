@@ -927,7 +927,6 @@ def _step_finalize(state: PipelineState) -> None:
     need_video = config.output_mp4 or config.output_mov
     subtitle_segments_for_files: list[style_convert.StylizedSegment] | None = None
     subtitle_segments_for_video: list[style_convert.StylizedSegment] | None = None
-    combined_subtitle_path: pathlib.Path | None = None
     max_chars = config.subtitle_max_chars
 
     if config.subtitle_mode != "off" or need_video:
@@ -937,18 +936,7 @@ def _step_finalize(state: PipelineState) -> None:
         if config.subtitle_mode != "off":
             subtitle_segments_for_files = base_subtitle_segments
         if need_video:
-            # 動画に埋め込む字幕は、ファイル出力モードに関わらず全話者を統合したデータを使う
             subtitle_segments_for_video = subtitles.merge_subtitle_segments(base_subtitle_segments)
-            if config.embed_combined_subtitles:
-                merged_paths = subtitles.write_subtitles(
-                    subtitle_segments_for_video,
-                    out_dir=run_dir,
-                    base_stem=f"{state.output_base_name}_merged_subtitle",
-                    mode="all",
-                    characters={char1.id: char1, char2.id: char2},
-                    max_chars_per_line=max_chars,
-                )
-                combined_subtitle_path = merged_paths[0] if merged_paths else None
 
     if config.subtitle_mode != "off" and subtitle_segments_for_files is not None:
         reporter.log("字幕ファイルを生成しています...")
@@ -996,8 +984,6 @@ def _step_finalize(state: PipelineState) -> None:
     if need_video:
         if subtitle_segments_for_video is None:
             raise RuntimeError("動画生成に必要な字幕データを準備できませんでした。")
-        if config.embed_combined_subtitles and combined_subtitle_path is None:
-            raise RuntimeError("mp4 に埋め込む統合字幕トラックの生成に失敗しました。")
         reporter.log("動画用の字幕ファイルを生成しています...")
         ass_path = run_dir / f"{state.output_base_name}.ass"
         subtitles.write_ass_subtitles(
@@ -1043,17 +1029,6 @@ def _step_finalize(state: PipelineState) -> None:
                 image_position=config.video_image_position,
             )
             state.complete_step("mp4 生成が完了しました。", step_start)
-            reporter.log(
-                "mp4 の字幕トラックを整理しています..."
-                if config.embed_combined_subtitles
-                else "mp4 の既存字幕トラックを削除しています..."
-            )
-            video.remux_subtitle_tracks(
-                target,
-                subtitle=combined_subtitle_path if config.embed_combined_subtitles else None,
-                ffmpeg_path=config.ffmpeg_path,
-                env_info=env_info,
-            )
 
         if config.output_mov:
             target = out_dir / f"{state.output_base_name}.mov"

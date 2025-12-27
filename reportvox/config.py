@@ -49,7 +49,6 @@ class PipelineConfig:
     video_fps: int = 24
     output_mp4: bool = False
     output_mov: bool = False
-    embed_combined_subtitles: bool = True
     review_transcript: TranscriptReviewMode = "llm"
     style_with_llm: bool = True
     diarization_threshold: float = 0.8

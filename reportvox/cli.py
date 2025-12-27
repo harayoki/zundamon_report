@@ -144,13 +144,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--bitrate", default="192k", help="mp3 出力時のビットレート（--mp3 使用時のみ）。")
     parser.add_argument("--mp4", action="store_true", help="字幕付きの mp4 動画を生成します。")
     parser.add_argument("--mov", action="store_true", help="字幕付きの透明 mov 動画を生成します。")
-    parser.add_argument(
-        "--no-mp4-subtitle-track",
-        dest="embed_combined_subtitles",
-        action="store_false",
-        help="mp4 出力後に既存の字幕トラックを削除したのち統合字幕トラックを追加しません（デフォルトでは追加）。",
-    )
-    parser.set_defaults(embed_combined_subtitles=True)
     parser.add_argument("--ffmpeg-path", default="ffmpeg", help="ffmpeg 実行ファイルへのパス（コマンド名またはフルパス）。")
     parser.add_argument(
         "--output-name",
@@ -362,7 +355,6 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
         video_fps=args.video_fps,
         output_mp4=args.mp4,
         output_mov=args.mov,
-        embed_combined_subtitles=args.embed_combined_subtitles,
         review_transcript=review_mode,
         style_with_llm=args.style_with_llm,
         diarization_threshold=args.diarization_threshold,
