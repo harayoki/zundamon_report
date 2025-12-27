@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import math
 import pathlib
 import subprocess
 from typing import Iterable, Sequence
+
+from PIL import Image
 
 from .envinfo import EnvironmentInfo, append_env_details
 
@@ -96,11 +99,47 @@ def render_video_with_subtitles(
     x_expr = str(image_position[0]) if image_position else "(W-w)/2"
     y_expr = str(image_position[1]) if image_position else "H*0.58 - h/2"
 
+    overlay_transforms: list[dict[str, float]] = []
+    if overlay_list and image_position is None:
+        margin_top_px = 8
+        for path, *_ in overlay_list:
+            with Image.open(path) as img:
+                src_w, src_h = img.size
+
+            base_height = src_h * image_scale
+            target_bottom = height * 0.58 + base_height / 2
+            target_height = max(base_height, target_bottom - margin_top_px)
+            scale_factor = target_height / src_h
+
+            scaled_w = math.ceil(src_w * scale_factor)
+            scaled_h = math.ceil(src_h * scale_factor)
+            x_pos = (width - scaled_w) / 2
+            y_pos = target_bottom - scaled_h
+
+            overlay_transforms.append(
+                {
+                    "scale_w": scaled_w,
+                    "scale_h": scaled_h,
+                    "x": x_pos,
+                    "y": y_pos,
+                }
+            )
+
     last_stream = subtitle_output
     for idx, (path, start, end) in enumerate(overlay_list):
         input_label = f"[{idx + 2}:v]"
         scaled_label = input_label
-        if image_scale != 1.0:
+        overlay_x_expr = x_expr
+        overlay_y_expr = y_expr
+        if overlay_transforms:
+            transform = overlay_transforms[idx]
+            scaled_label = f"[img{idx}]"
+            overlay_x_expr = str(math.floor(transform["x"]))
+            overlay_y_expr = str(math.floor(transform["y"]))
+            filter_parts.append(
+                f"{input_label}scale={transform['scale_w']}:{transform['scale_h']}[img{idx}]"
+            )
+        elif image_scale != 1.0:
             filter_parts.append(
                 f"{input_label}scale=ceil(iw*{image_scale}):ceil(ih*{image_scale})[img{idx}]"
             )
@@ -109,7 +148,7 @@ def render_video_with_subtitles(
         start_ts = max(0.0, start)
         end_ts = max(0.0, end)
         filter_parts.append(
-            f"{last_stream}{scaled_label}overlay=x={x_expr}:y={y_expr}:enable='between(t,{start_ts:.3f},{end_ts:.3f})'"
+            f"{last_stream}{scaled_label}overlay=x={overlay_x_expr}:y={overlay_y_expr}:enable='between(t,{start_ts:.3f},{end_ts:.3f})'"
             f"{output_label}"
         )
         last_stream = output_label
