@@ -43,6 +43,70 @@ def _heuristic_phrase(segment: AlignedSegment, meta: CharacterMeta, inserted: se
     return text
 
 
+def _character_traits(meta: CharacterMeta) -> list[str]:
+    traits = []
+    if meta.style_first_person:
+        traits.append(f"一人称: {meta.style_first_person}")
+    if meta.style_endings:
+        traits.append(f"語尾: {', '.join(meta.style_endings)}")
+    if meta.role:
+        traits.append(f"役割: {meta.role}")
+    default_phrases = meta.phrases.get("default", [])
+    if default_phrases:
+        traits.append(f"口癖: {', '.join(default_phrases)}")
+    return traits
+
+
+def _llm_transform_batch(
+    texts: Sequence[str],
+    meta: CharacterMeta,
+    config: PipelineConfig,
+    *,
+    prompt_logger: Callable[[str, str], None] | None = None,
+) -> list[list[str]] | None:
+    if not config.style_with_llm:
+        return None
+
+    if config.llm_backend in {"none", "gemini"}:
+        return None
+
+    traits = _character_traits(meta)
+    trait_block = "\n".join(traits) if traits else "特徴: なし"
+
+    system_prompt = (
+        "あなたは、与えられたキャラクターになりきって文章のスタイルを変換する、プロの日本語文体アシスタントです。\n"
+        "以下のルールを厳密に守ってください:\n"
+        "- 応答は、入力行を同じ順序・同じ行数で並べた変換後の日本語のみを含めてください。\n"
+        "- 説明、前置き、番号、余計な装飾や記号は不要です。\n"
+        "- 元の文章の意味、固有名詞、専門用語を絶対に変えないでください。\n"
+        "- 英語に翻訳しないでください。\n"
+        "- 1行が長い場合は、同じ行の中で自然に区切れる箇所で改行を入れても構いません。\n"
+    )
+
+    user_prompt = (
+        f"キャラクター『{meta.display_name or meta.id}』の口調に合わせてください。\n"
+        f"{trait_block}\n"
+        "以下に並ぶ会話文を順番に口調変換し、対応する結果だけを改行区切りで出力してください。"
+        "指示や特徴の説明は上記だけで十分なので、出力は会話文だけにしてください。\n"
+        "会話文:\n"
+        + "\n".join(texts)
+    )
+
+    if prompt_logger:
+        prompt_logger(system_prompt, user_prompt)
+
+    try:
+        content = chat_completion(system_prompt=system_prompt, user_prompt=user_prompt, config=config)
+    except Exception:
+        return None
+
+    lines = [line.strip() for line in content.splitlines() if line.strip()]
+    if len(lines) != len(texts):
+        return None
+
+    return [[line] for line in lines]
+
+
 def _llm_transform(
     text: str,
     meta: CharacterMeta,
@@ -95,11 +159,27 @@ def apply_style(
     stylized: list[StylizedSegment] = []
     inserted: set[str] = set()
     char_map = {char1.id: char1, char2.id: char2}
-    for seg in segments:
+    llm_results: dict[int, list[str]] = {}
+
+    if config.style_with_llm and config.llm_backend not in {"none", "gemini"}:
+        for character_id, meta in char_map.items():
+            indexes = [idx for idx, seg in enumerate(segments) if (seg.character or char1.id) == character_id]
+            if not indexes:
+                continue
+            texts = [segments[idx].text for idx in indexes]
+            transformed = _llm_transform_batch(texts, meta, config, prompt_logger=prompt_logger)
+            if transformed is None:
+                continue
+            for idx, lines in zip(indexes, transformed):
+                llm_results[idx] = lines
+
+    for idx, seg in enumerate(segments):
         meta = char_map.get(seg.character or char1.id, char1)
 
         # LLM変換とヒューリスティックな口癖挿入を適用
-        texts = _llm_transform(seg.text, meta, config, prompt_logger=prompt_logger)
+        texts = llm_results.get(idx)
+        if texts is None:
+            texts = _llm_transform(seg.text, meta, config, prompt_logger=prompt_logger)
         if len(texts) == 1:
             # LLMが分割しなかった場合は、ヒューリスティックな口癖挿入を試みる
             texts = [_heuristic_phrase(seg, meta, inserted)]
