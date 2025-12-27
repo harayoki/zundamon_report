@@ -220,13 +220,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--video-width",
         type=_positive_nonzero_int,
-        default=1920,
+        default=1080,
         help="動画出力時の横幅 (ピクセル)。",
     )
     parser.add_argument(
         "--video-height",
         type=_positive_nonzero_int,
-        default=1080,
+        default=1920,
         help="動画出力時の縦幅 (ピクセル)。",
     )
     parser.add_argument(
