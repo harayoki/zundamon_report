@@ -259,10 +259,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="誤字脱字の自動校正を行わずに次の工程へ進みます。",
     )
     parser.add_argument(
-        "--style-with-llm",
-        action=argparse.BooleanOptionalAction,
+        "--no-style-with-llm",
+        action="store_false",
+        dest="style_with_llm",
         default=True,
-        help="口調変換で LLM を使用します (--llm でバックエンド指定)。無効化する場合は --no-style-with-llm を指定してください。",
+        help="口調変換で LLM を使用しない (--llm でバックエンド指定)。省略時は LLM による口調変換を行います。",
     )
     parser.add_argument(
         "--resume-from",
