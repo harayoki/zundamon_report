@@ -41,9 +41,53 @@ def chat_completion(
         base_url = os.environ.get("OPENAI_API_BASE", "https://api.openai.com/v1").rstrip("/")
         model_name = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
         headers = {"Authorization": f"Bearer {api_key}"}
-        # ここに OpenAI の API 呼び出しロジックを後で実装する必要がある
-        # 現状は Ollama のロジックのみが実装されているため、プレースホルダーとしてエラーを出す
-        raise NotImplementedError("OpenAI バックエンドは現在実装されていません。")
+        payload = {
+            "model": model_name,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "temperature": 0.0,
+        }
+
+        try:
+            response = requests.post(
+                f"{base_url}/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=timeout,
+            )
+        except requests.exceptions.RequestException as exc:  # pragma: no cover - network related
+            raise RuntimeError(
+                append_env_details(
+                    "OpenAI API への接続に失敗しました。OPENAI_API_BASE やネットワークを確認してください。",
+                    env_info,
+                )
+            ) from exc
+
+        if response.status_code != 200:
+            try:
+                detail = response.json()
+            except ValueError:
+                detail = response.text
+            raise RuntimeError(
+                append_env_details(
+                    f"OpenAI API がエラーを返しました (status={response.status_code}): {detail}", env_info
+                )
+            )
+
+        try:
+            data = response.json()
+            content = data["choices"][0]["message"]["content"]
+        except (ValueError, KeyError, IndexError) as exc:
+            raise RuntimeError(
+                append_env_details("OpenAI API 応答の形式が不正です。", env_info)
+            ) from exc
+
+        if not content:
+            raise RuntimeError(append_env_details("OpenAI 応答に content が含まれていません。", env_info))
+
+        return str(content).strip()
 
     elif backend == "ollama":
         ollama_host = config.llm_host or os.environ.get("OLLAMA_HOST") or "localhost"
