@@ -791,7 +791,16 @@ def _step_stylize(state: PipelineState) -> None:
             prompt_logger = _log_style_prompt
 
         stylized = style_convert.apply_style(mapped, char1, char2, config=config, prompt_logger=prompt_logger)
-        stylized = _prepend_introductions(stylized, char1=char1, char2=char2, config=config)
+        stylized = _prepend_introductions(
+            stylized,
+            char1=char1,
+            char2=char2,
+            config=config,
+            env_info=state.env_info,
+            transcript_text=whisper_result.text if whisper_result else None,
+            reporter=reporter,
+            run_dir=run_dir,
+        )
         _save_stylized(stylized, stylized_path)
         _log_style_diff(mapped, stylized, run_dir / "style_diff.log")
         reporter.log("口調変換が完了し保存しました。")
@@ -1141,11 +1150,84 @@ def _run_pipeline_steps(state: PipelineState) -> None:
     state.reporter.summarize()
 
 
+def _decide_zunda_jobs(
+    *,
+    transcript_text: str | None,
+    config: PipelineConfig,
+    env_info: EnvironmentInfo | None,
+    reporter: _ProgressReporter,
+    prompt_log_dir: pathlib.Path | None = None,
+) -> tuple[str, str] | None:
+    if config.llm_backend == "none":
+        reporter.log("LLM バックエンドが指定されていないため、ずんだもんの職業決定をスキップします (--llm で設定可能)。")
+        return None
+
+    context = (transcript_text or "").strip()
+    if len(context) > 800:
+        context = context[:800] + "…"
+
+    system_prompt = (
+        "あなたは、音声レポートのテーマに合う職業を提案する日本語アシスタントです。\n"
+        "出力は JSON 形式のみで、キーは 'zunda_senior_job' と 'zunda_junior_job' のみを含めてください。\n"
+        "説明文や余計な文字は入れず、必ず日本語で短い職業名だけを返してください。"
+    )
+
+    user_prompt = (
+        "以下の内容に関連する、ずんだもんの職業設定を考えてください。\n"
+        "- zunda_senior_job: レポート全体の話題に関連し、憧れの対象になりそうな華やかな職業。\n"
+        "- zunda_junior_job: 上記と対比になる、現実がちょっぴり厳しそうでコミカルな仕事。\n"
+        "短く親しみやすい言い回しで、聞いてクスッとできる組み合わせにしてください。\n"
+        "会話内容の概要:\n"
+        f"{context}"
+    )
+
+    prompt_log_path: pathlib.Path | None = None
+    if prompt_log_dir is not None:
+        prompt_log_path = prompt_log_dir / "zunda_jobs_prompt.txt"
+        prompt_content = (
+            "[System]\n"
+            f"{system_prompt.strip()}\n\n"
+            "[User]\n"
+            f"{user_prompt.strip()}\n"
+        )
+        prompt_log_path.write_text(prompt_content, encoding="utf-8")
+
+    try:
+        content = chat_completion(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            config=config,
+            env_info=env_info,
+        )
+        data = json.loads(content)
+        senior_job = str(data.get("zunda_senior_job", "")).strip()
+        junior_job = str(data.get("zunda_junior_job", "")).strip()
+    except Exception as exc:
+        reporter.log(f"ずんだもんの職業生成に失敗したため、省略します: {exc}")
+        return None
+
+    if not senior_job or not junior_job:
+        reporter.log("LLM 応答に必要な職業情報が含まれていなかったため、省略します。")
+        return None
+
+    config.zunda_senior_job = senior_job
+    config.zunda_junior_job = junior_job
+    if prompt_log_path is not None:
+        reporter.log(f"ずんだもん職業プロンプトを {prompt_log_path.name} に保存しました。")
+    reporter.log(f"LLM がずんだもんの職業を決定しました: 憧れ={senior_job} / 現在={junior_job}")
+    return senior_job, junior_job
+
+
 def _prepend_introductions(
     segments: Sequence[style_convert.StylizedSegment],
     char1: characters.CharacterMeta,
     char2: characters.CharacterMeta,
     config: PipelineConfig,
+    *,
+    env_info: EnvironmentInfo | None = None,
+    transcript_text: str | None = None,
+    reporter: _ProgressReporter | None = None,
+    run_dir: pathlib.Path | None = None,
 ) -> list[style_convert.StylizedSegment]:
     if not config.prepend_intro:
         return list(segments)
@@ -1167,8 +1249,20 @@ def _prepend_introductions(
     # 話者1の挨拶を処理
     intro1_text = config.intro1
     # --intro1 がなく、かつ条件を満たす場合にずんだもんの職業挨拶を生成
-    if intro1_text is None and char1.id == "zundamon" and config.zunda_senior_job and config.zunda_junior_job:
-        intro1_text = f"僕の名前はずんだもん、{config.zunda_senior_job}にあこがれる{config.zunda_junior_job}なのだ"
+    if intro1_text is None and char1.id == "zundamon":
+        if config.zunda_senior_job and config.zunda_junior_job:
+            intro1_text = f"僕の名前はずんだもん、{config.zunda_senior_job}にあこがれる{config.zunda_junior_job}なのだ"
+        elif config.zunda_senior_job is None and config.zunda_junior_job is None and reporter is not None:
+            decided = _decide_zunda_jobs(
+                transcript_text=transcript_text,
+                config=config,
+                env_info=env_info,
+                reporter=reporter,
+                prompt_log_dir=run_dir,
+            )
+            if decided:
+                senior_job, junior_job = decided
+                intro1_text = f"僕の名前はずんだもん、{senior_job}にあこがれる{junior_job}なのだ"
 
     if intro1_text and char1.id in speaker_map:
         intro_segments.append(

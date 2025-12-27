@@ -190,7 +190,7 @@ python -m reportvox input.mp4 --speakers auto --mp3
 - --intro1: 話者1の最初の挨拶文を指定します。
 - --intro2: 話者2の最初の挨拶文を指定します。
 - --no-intro: 最初の挨拶文の自動挿入を無効化します。
-- --zunda-senior-job, --zunda-junior-job: speaker1がずんだもんの場合のデフォルト挨拶を生成します（--intro1が指定されている場合はこちらが優先されます）。
+- --zunda-senior-job, --zunda-junior-job: speaker1がずんだもんの場合のデフォルト挨拶を生成します（--intro1が指定されている場合はこちらが優先されます）。どちらも省略した場合は、LLM がレポート内容に沿った「憧れの職業」と「現実のしょぼい職業」を自動で考えます（`--llm` でバックエンドを指定してください）。
 - --model: Whisper のモデルサイズ。
 - --speed-scale: VOICEVOX での読み上げ速度（デフォルト 1.1）。発話の間隔は維持されるため、音声全体の長さはほぼ変わりません。
 - --llm {none,openai,ollama}: LLMバックエンドの指定。
