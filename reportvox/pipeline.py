@@ -898,19 +898,25 @@ def _step_finalize(state: PipelineState) -> None:
     colors = _ensure_character_colors(state, char1, char2)
 
     need_video = config.output_mp4 or config.output_mov
-    subtitle_segments: list[style_convert.StylizedSegment] | None = None
+    subtitle_segments_for_files: list[style_convert.StylizedSegment] | None = None
+    subtitle_segments_for_video: list[style_convert.StylizedSegment] | None = None
     max_chars = config.subtitle_max_chars
 
     if config.subtitle_mode != "off" or need_video:
-        subtitle_segments = subtitles.align_segments_to_audio(
+        base_subtitle_segments = subtitles.align_segments_to_audio(
             state.stylized_segments, state.synthesized_paths, placements=state.placements
         )
+        if config.subtitle_mode != "off":
+            subtitle_segments_for_files = base_subtitle_segments
+        if need_video:
+            # 動画に埋め込む字幕は、ファイル出力モードに関わらず全話者を統合したデータを使う
+            subtitle_segments_for_video = base_subtitle_segments
 
-    if config.subtitle_mode != "off" and subtitle_segments is not None:
+    if config.subtitle_mode != "off" and subtitle_segments_for_files is not None:
         reporter.log("字幕ファイルを生成しています...")
         step_start = reporter.now()
         subtitle_paths = subtitles.write_subtitles(
-            subtitle_segments,
+            subtitle_segments_for_files,
             out_dir=out_dir,
             base_stem=state.output_base_name,
             mode=config.subtitle_mode,
@@ -950,12 +956,12 @@ def _step_finalize(state: PipelineState) -> None:
     image_overlays: list[tuple[pathlib.Path, float, float]] = []
 
     if need_video:
-        if subtitle_segments is None:
+        if subtitle_segments_for_video is None:
             raise RuntimeError("動画生成に必要な字幕データを準備できませんでした。")
         reporter.log("動画用の字幕ファイルを生成しています...")
         ass_path = run_dir / f"{state.output_base_name}.ass"
         subtitles.write_ass_subtitles(
-            subtitle_segments,
+            subtitle_segments_for_video,
             path=ass_path,
             characters={char1.id: char1, char2.id: char2},
             colors=colors,
