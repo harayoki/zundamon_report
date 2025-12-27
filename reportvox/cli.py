@@ -252,7 +252,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--video-image-scale",
         type=_positive_float,
-        default=0.35,
+        default=0.45,
         help="動画に重ねる画像の拡大率。1.0 が原寸で、すべての画像に共通します。",
     )
     parser.add_argument(

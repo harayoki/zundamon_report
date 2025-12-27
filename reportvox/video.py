@@ -69,7 +69,7 @@ def render_video_with_subtitles(
     transparent: bool = False,
     env_info: EnvironmentInfo | None = None,
     overlays: Iterable[tuple[pathlib.Path, float, float]] | None = None,
-    image_scale: float = 0.35,
+    image_scale: float = 0.45,
     image_position: tuple[int, int] | None = None,
 ) -> None:
     """音声と字幕を組み合わせて動画を生成する。
