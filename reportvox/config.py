@@ -44,8 +44,8 @@ class PipelineConfig:
     subtitle_max_chars: int = 25
     subtitle_font: Optional[str] = None
     subtitle_font_size: int = 48
-    video_width: int = 1920
-    video_height: int = 1080
+    video_width: int = 1080
+    video_height: int = 1920
     video_fps: int = 24
     output_mp4: bool = False
     output_mov: bool = False

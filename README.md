@@ -203,7 +203,7 @@ python -m reportvox input.mp4 --speakers auto --mp3
 - --bitrate: mp3 出力時のビットレート。
 - --mp4: 字幕入りの mp4 を生成。
 - --mov: 字幕入り・透明背景の mov (ProRes 4444) を生成。
-- --video-width / --video-height: 動画の解像度をピクセルで指定（デフォルト 1920x1080）。
+- --video-width / --video-height: 動画の解像度をピクセルで指定（デフォルト 1080x1920）。
 - --video-fps: 動画のフレームレート。デフォルト 24 fps。
 - --video-images: 動画上に順番に表示する画像ファイルのパスを指定（複数指定可）。
 - --video-image-times: 各画像の表示開始秒を指定（--video-images と同数）。未指定時は尺を等分。
