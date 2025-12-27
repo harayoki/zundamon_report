@@ -1013,7 +1013,18 @@ def run_pipeline(config: PipelineConfig) -> None:
         run_dir.mkdir(parents=True, exist_ok=True)
 
     env_pyannote_token = os.environ.get("PYANNOTE_TOKEN")
-    hf_token, _ = resolve_hf_token(config.hf_token, env_pyannote_token)
+    hf_token, _ = resolve_hf_token(env_pyannote_token)
+    env_info = EnvironmentInfo.collect(
+        config.ffmpeg_path, env_pyannote_token, config.llm_host, config.llm_port
+    )
+
+    if config.llm_backend == "openai" and not os.environ.get("OPENAI_API_KEY"):
+        raise RuntimeError(
+            append_env_details(
+                "OPENAI_API_KEY が未設定のため LLM バックエンド 'openai' を利用できません。環境変数を設定してから再実行してください。",
+                env_info,
+            )
+        )
 
     state = PipelineState(
         config=config,
@@ -1021,9 +1032,7 @@ def run_pipeline(config: PipelineConfig) -> None:
         run_id=run_id,
         run_dir=run_dir,
         out_dir=out_dir,
-        env_info=EnvironmentInfo.collect(
-            config.ffmpeg_path, config.hf_token, env_pyannote_token, config.llm_host, config.llm_port
-        ),
+        env_info=env_info,
         hf_token=hf_token,
     )
     diarization_path = run_dir / "diarization.json"
@@ -1031,7 +1040,7 @@ def run_pipeline(config: PipelineConfig) -> None:
     if need_new_diarization and hf_token is None:
         raise RuntimeError(
             append_env_details(
-                "pyannote の話者分離には Hugging Face Token が必要ですが、--hf-token と HF_TOKEN/PYANNOTE_TOKEN のいずれも指定されていません。\n"
+                "pyannote の話者分離には Hugging Face Token が必要ですが、HF_TOKEN/PYANNOTE_TOKEN のいずれも指定されていません。\n"
                 f"{diarize._PYANNOTE_ACCESS_STEPS}\n{diarize._PYANNOTE_TOKEN_USAGE}",
                 state.env_info,
             )

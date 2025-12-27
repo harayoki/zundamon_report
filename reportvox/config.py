@@ -35,7 +35,6 @@ class PipelineConfig:
     llm_host: Optional[str]
     llm_port: Optional[int]
     ollama_model: Optional[str] = None
-    hf_token: Optional[str] = None
     speed_scale: float = 1.1
     resume_run_id: Optional[str] = None
     resume_from: Optional[str] = None

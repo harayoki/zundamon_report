@@ -49,7 +49,7 @@ pip install "numpy<2"
    - pyannote/segmentation-3.0
 2. その他認証が求められるエラーが表示された場合も各ページで利用規約に同意してください。
 3.  Hugging Face Settings でトークンを作成。
-4. トークンを環境変数 PYANNOTE_TOKEN または --hf-token で渡してください。
+4. トークンを環境変数 PYANNOTE_TOKEN または HF_TOKEN で渡してください。
 
 ## ローカルLLM (Ollama) との連携
 文字起こし結果の自動校正 (`--review-transcript-llm`) などで、ローカルで動作するLLMと連携することができます。本ツールではOllama経由での利用を想定しています。
@@ -181,7 +181,6 @@ python -m reportvox input.mp4 --speakers auto --mp3
 - --ollama-host: Ollamaのホスト名。
 - --ollama-port: Ollamaのポート番号。
 - --ollama-model: Ollamaで使用するモデル名。デフォルトは環境変数 LOCAL_LLM_MODEL または 'llama3'。
-- --hf-token: Hugging Face Token。
 - --mp3: mp3 を生成（out/ には mp3 だけを出力）。
 - --bitrate: mp3 出力時のビットレート。
 - --mp4: 字幕入りの mp4 を生成。

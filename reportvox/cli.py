@@ -182,11 +182,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Ollama で使用するモデル名。デフォルトは環境変数 LOCAL_LLM_MODEL または 'llama3'。 ",
     )
     parser.add_argument(
-        "--hf-token",
-        default=None,
-        help="pyannote.audio 用の Hugging Face Token（auto/2 人話者分離時に必要、環境変数 PYANNOTE_TOKEN も参照）。",
-    )
-    parser.add_argument(
         "--subtitles",
         choices=["off", "all", "split"],
         default="off",
@@ -329,7 +324,6 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
         llm_host=args.ollama_host,
         llm_port=args.ollama_port,
         ollama_model=args.ollama_model,
-        hf_token=args.hf_token,
         speed_scale=args.speed_scale,
         resume_run_id=args.resume_run_id,
         resume_from=args.resume_from,
@@ -355,11 +349,11 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
     )
 
 
-def _warn_missing_hf_token(config: PipelineConfig) -> None:
-    token, _ = resolve_hf_token(config.hf_token, os.environ.get("PYANNOTE_TOKEN"))
+def _warn_missing_hf_token() -> None:
+    token, _ = resolve_hf_token(os.environ.get("PYANNOTE_TOKEN"))
     if token is None:
         print(
-            "警告: Hugging Face Token (HF_TOKEN/PYANNOTE_TOKEN または --hf-token) が設定されていません。"
+            "警告: Hugging Face Token (HF_TOKEN/PYANNOTE_TOKEN) が設定されていません。"
             "pyannote の話者分離を行う場合に必要となりますが、このまま続行します。",
             file=sys.stderr,
         )
@@ -367,7 +361,7 @@ def _warn_missing_hf_token(config: PipelineConfig) -> None:
 
 def main(argv: Sequence[str] | None = None) -> None:
     config = parse_args(argv)
-    _warn_missing_hf_token(config)
+    _warn_missing_hf_token()
     try:
         run_pipeline(config)
     except (FileNotFoundError, RuntimeError) as e:

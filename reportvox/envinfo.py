@@ -67,10 +67,7 @@ def gather_dependency_versions() -> Dict[str, str]:
     return versions
 
 
-def resolve_hf_token(hf_token_arg: Optional[str], env_token: Optional[str] | None = None) -> tuple[Optional[str], str]:
-    if hf_token_arg is not None:
-        return hf_token_arg, "cli"
-
+def resolve_hf_token(env_token: Optional[str] | None = None) -> tuple[Optional[str], str]:
     env_token_hf = os.environ.get("HF_TOKEN")
     if env_token_hf:
         return env_token_hf, "env:HF_TOKEN"
@@ -96,13 +93,12 @@ class EnvironmentInfo:
     def collect(
         cls,
         ffmpeg_path: str,
-        hf_token_arg: Optional[str],
         env_token: Optional[str],
         llm_host: Optional[str] = None,
         llm_port: Optional[int] = None,
     ) -> "EnvironmentInfo":
         ffmpeg_probe = probe_ffmpeg(ffmpeg_path)
-        _, token_source = resolve_hf_token(hf_token_arg, env_token)
+        _, token_source = resolve_hf_token(env_token)
         return cls(
             ffmpeg_path=str(ffmpeg_probe.path),
             ffmpeg_available=ffmpeg_probe.available,
@@ -134,9 +130,7 @@ class EnvironmentInfo:
             llm_line = f"Ollama: host={self.llm_host or '未指定'}, port={self.llm_port or '未指定'}"
             lines.append(llm_line)
 
-        if self.hf_token_source == "cli":
-            token_line = "Hugging Face Token の指定元: CLI 引数 (--hf-token)"
-        elif self.hf_token_source == "env:HF_TOKEN":
+        if self.hf_token_source == "env:HF_TOKEN":
             token_line = "Hugging Face Token の指定元: 環境変数 (HF_TOKEN)"
         elif self.hf_token_source == "env:PYANNOTE_TOKEN":
             token_line = "Hugging Face Token の指定元: 環境変数 (PYANNOTE_TOKEN)"
