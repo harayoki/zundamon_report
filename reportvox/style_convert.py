@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from typing import Sequence
+from typing import Callable, Sequence
 
 from .characters import CharacterMeta
 from .config import PipelineConfig
@@ -43,7 +43,13 @@ def _heuristic_phrase(segment: AlignedSegment, meta: CharacterMeta, inserted: se
     return text
 
 
-def _llm_transform(text: str, meta: CharacterMeta, config: PipelineConfig) -> list[str]:
+def _llm_transform(
+    text: str,
+    meta: CharacterMeta,
+    config: PipelineConfig,
+    *,
+    prompt_logger: Callable[[str, str], None] | None = None,
+) -> list[str]:
     if not config.style_with_llm:
         return [text]
 
@@ -67,6 +73,8 @@ def _llm_transform(text: str, meta: CharacterMeta, config: PipelineConfig) -> li
         f"口癖: {', '.join(meta.phrases.get('default', []))}\n"
         f"文章: {text}"
     )
+    if prompt_logger:
+        prompt_logger(system_prompt, user_prompt)
     try:
         content = chat_completion(system_prompt=system_prompt, user_prompt=user_prompt, config=config)
         # 応答が空行を含む場合があるので、空行は除去する
@@ -81,6 +89,8 @@ def apply_style(
     char1: CharacterMeta,
     char2: CharacterMeta,
     config: PipelineConfig,
+    *,
+    prompt_logger: Callable[[str, str], None] | None = None,
 ) -> list[StylizedSegment]:
     stylized: list[StylizedSegment] = []
     inserted: set[str] = set()
@@ -89,7 +99,7 @@ def apply_style(
         meta = char_map.get(seg.character or char1.id, char1)
 
         # LLM変換とヒューリスティックな口癖挿入を適用
-        texts = _llm_transform(seg.text, meta, config)
+        texts = _llm_transform(seg.text, meta, config, prompt_logger=prompt_logger)
         if len(texts) == 1:
             # LLMが分割しなかった場合は、ヒューリスティックな口癖挿入を試みる
             texts = [_heuristic_phrase(seg, meta, inserted)]
