@@ -39,6 +39,7 @@ class PipelineConfig:
     speed_scale: float = 1.1
     resume_run_id: Optional[str] = None
     resume_from: Optional[str] = None
+    force_transcribe: bool = False
     subtitle_mode: SubtitleMode = "off"
     subtitle_max_chars: int = 25
     subtitle_font: Optional[str] = None

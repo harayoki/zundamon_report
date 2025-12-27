@@ -145,6 +145,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="出力ファイル名のベース（拡張子不要）。例: --output-name demo => out/demo.wav|mp3|srt",
     )
     parser.add_argument("-f", "--force", action="store_true", help="既存の出力があっても確認せず上書きする。")
+    parser.add_argument(
+        "--force-transcribe",
+        action="store_true",
+        help="文字起こしキャッシュを無視して Whisper による文字起こしをやり直します。",
+    )
     parser.add_argument("--keep-work", action="store_true", help="work/ 以下の中間ファイルを削除せず残す（開発/再出力向け）。")
     parser.add_argument("--model", default="large-v3", choices=['tiny', 'base', 'small', 'medium', 'large', 'large-v1', 'large-v2', 'large-v3'], help="利用する Whisper モデルサイズ（tiny/base/small/medium/large-v3）。")
     parser.add_argument("--speed-scale", type=_positive_float, default=1.1, help="VOICEVOX の speedScale を指定（デフォルト 1.1）。")
@@ -317,6 +322,7 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
         ffmpeg_path=args.ffmpeg_path,
         keep_work=args.keep_work,
         output_name=args.output_name,
+        force_transcribe=args.force_transcribe,
         force_overwrite=args.force,
         whisper_model=args.model,
         llm_backend=args.llm,
