@@ -241,7 +241,9 @@ def remux_subtitle_tracks(
     if subtitle is not None and not subtitle.exists():
         raise FileNotFoundError(append_env_details(f"字幕ファイルが見つかりません: {subtitle}", env_info))
 
-    tmp_output = source.with_name(source.name + ".tmp")
+    # 元の拡張子を保った一時ファイル名にする（例: movie.mp4 -> movie_tmp.mp4）。
+    # .tmp だけを後ろに付けると拡張子が .tmp になり、ffmpeg がフォーマットを判別できない。
+    tmp_output = source.with_name(f"{source.stem}_tmp{source.suffix}")
 
     cmd: list[str] = [
         ffmpeg_path,
