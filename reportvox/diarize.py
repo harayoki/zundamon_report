@@ -109,6 +109,8 @@ _PYANNOTE_ACCESS_STEPS = """\
   1. https://huggingface.co/pyannote/speaker-diarization と https://huggingface.co/pyannote/segmentation で利用規約に同意する
   2. https://huggingface.co/settings/tokens でアクセストークンを発行する"""
 
+_PYANNOTE_TOKEN_USAGE = "HF_TOKEN または PYANNOTE_TOKEN の環境変数、もしくは --hf-token 引数で Hugging Face Token を指定してください。"
+
 _TORCHCODEC_TROUBLESHOOT = """TorchCodec/FFmpeg エラーの対処:
 - FFmpeg 7.1 Shared版を使い、bin フォルダを PATH に含めてください。
 - FFmpeg 8.x 系は現在ライブラリ側が未対応のため、必ず 7.x を使用してください。"""
@@ -133,7 +135,7 @@ def diarize_audio(
         return [DiarizedSegment(start=0.0, end=1e9, speaker="A")]
 
     # 認証設定
-    token = hf_token or os.environ.get("PYANNOTE_TOKEN")
+    token = hf_token or os.environ.get("HF_TOKEN") or os.environ.get("PYANNOTE_TOKEN")
     if token is None:
         raise RuntimeError(f"Hugging Face Token が必要です。\n{_PYANNOTE_ACCESS_STEPS}")
     os.environ["HF_TOKEN"] = token

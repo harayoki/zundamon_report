@@ -67,6 +67,21 @@ def gather_dependency_versions() -> Dict[str, str]:
     return versions
 
 
+def resolve_hf_token(hf_token_arg: Optional[str], env_token: Optional[str] | None = None) -> tuple[Optional[str], str]:
+    if hf_token_arg is not None:
+        return hf_token_arg, "cli"
+
+    env_token_hf = os.environ.get("HF_TOKEN")
+    if env_token_hf:
+        return env_token_hf, "env:HF_TOKEN"
+
+    env_token_pyannote = env_token or os.environ.get("PYANNOTE_TOKEN")
+    if env_token_pyannote:
+        return env_token_pyannote, "env:PYANNOTE_TOKEN"
+
+    return None, "absent"
+
+
 @dataclass
 class EnvironmentInfo:
     ffmpeg_path: str
@@ -78,9 +93,16 @@ class EnvironmentInfo:
     hf_token_source: str = "absent"
 
     @classmethod
-    def collect(cls, ffmpeg_path: str, hf_token_arg: Optional[str], env_token: Optional[str], llm_host: Optional[str], llm_port: Optional[int]) -> "EnvironmentInfo":
+    def collect(
+        cls,
+        ffmpeg_path: str,
+        hf_token_arg: Optional[str],
+        env_token: Optional[str],
+        llm_host: Optional[str] = None,
+        llm_port: Optional[int] = None,
+    ) -> "EnvironmentInfo":
         ffmpeg_probe = probe_ffmpeg(ffmpeg_path)
-        token_source = "cli" if hf_token_arg is not None else "env" if env_token else "absent"
+        _, token_source = resolve_hf_token(hf_token_arg, env_token)
         return cls(
             ffmpeg_path=str(ffmpeg_probe.path),
             ffmpeg_available=ffmpeg_probe.available,
@@ -114,7 +136,9 @@ class EnvironmentInfo:
 
         if self.hf_token_source == "cli":
             token_line = "Hugging Face Token の指定元: CLI 引数 (--hf-token)"
-        elif self.hf_token_source == "env":
+        elif self.hf_token_source == "env:HF_TOKEN":
+            token_line = "Hugging Face Token の指定元: 環境変数 (HF_TOKEN)"
+        elif self.hf_token_source == "env:PYANNOTE_TOKEN":
             token_line = "Hugging Face Token の指定元: 環境変数 (PYANNOTE_TOKEN)"
         else:
             token_line = "Hugging Face Token の指定元: 未指定"

@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import os
 import pathlib
 import sys
 from typing import Sequence
 
 from reportvox import utils
 from reportvox.config import PipelineConfig
+from reportvox.envinfo import resolve_hf_token
 from reportvox.pipeline import run_pipeline
 
 
@@ -347,8 +349,19 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
     )
 
 
+def _warn_missing_hf_token(config: PipelineConfig) -> None:
+    token, _ = resolve_hf_token(config.hf_token, os.environ.get("PYANNOTE_TOKEN"))
+    if token is None:
+        print(
+            "警告: Hugging Face Token (HF_TOKEN/PYANNOTE_TOKEN または --hf-token) が設定されていません。"
+            "pyannote の話者分離を行う場合に必要となりますが、このまま続行します。",
+            file=sys.stderr,
+        )
+
+
 def main(argv: Sequence[str] | None = None) -> None:
     config = parse_args(argv)
+    _warn_missing_hf_token(config)
     try:
         run_pipeline(config)
     except (FileNotFoundError, RuntimeError) as e:

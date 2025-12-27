@@ -7,20 +7,20 @@ import os
 from typing import Optional
 
 from . import diarize
-from .envinfo import EnvironmentInfo, append_env_details
+from .envinfo import EnvironmentInfo, append_env_details, resolve_hf_token
 
 
 def authenticate_only(hf_token: Optional[str], ffmpeg_path: str) -> None:
     """pyannote/speaker-diarization の認証を試行し、結果を標準出力へ表示する。"""
     env_token = os.environ.get("PYANNOTE_TOKEN")
+    token, _ = resolve_hf_token(hf_token, env_token)
     env_info = EnvironmentInfo.collect(ffmpeg_path, hf_token, env_token)
 
-    token = hf_token or env_token
     if token is None:
         raise RuntimeError(
             append_env_details(
                 "pyannote/speaker-diarization への認証には Hugging Face Token が必要です。\n"
-                "環境変数 PYANNOTE_TOKEN か --hf-token で指定してください。",
+                "環境変数 HF_TOKEN/PYANNOTE_TOKEN か --hf-token で指定してください。",
                 env_info,
             )
         )

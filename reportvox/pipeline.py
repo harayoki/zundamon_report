@@ -15,7 +15,7 @@ from typing import Callable, Dict, List, Optional, Sequence
 
 from . import audio, characters, diarize, style_convert, subtitles, transcribe, utils, video, voicevox
 from .config import LLMBackend, PipelineConfig, SpeakerMode, SubtitleMode, TranscriptReviewMode
-from .envinfo import EnvironmentInfo, append_env_details
+from .envinfo import EnvironmentInfo, append_env_details, resolve_hf_token
 from .llm_client import chat_completion
 
 
@@ -453,6 +453,7 @@ class PipelineState:
     run_dir: pathlib.Path
     out_dir: pathlib.Path
     env_info: EnvironmentInfo
+    hf_token: Optional[str] = None
     steps_done: int = 0
     total_steps: int = 0
     # Step outputs
@@ -605,7 +606,7 @@ def _step_diarize(state: PipelineState) -> None:
     env_info = state.env_info
     resume = config.resume_run_id is not None
 
-    hf_token = config.hf_token or os.environ.get("PYANNOTE_TOKEN")
+    hf_token = state.hf_token
     diarization_path = run_dir / "diarization.json"
     step_start = reporter.now()
     if resume and diarization_path.exists():
@@ -933,22 +934,26 @@ def run_pipeline(config: PipelineConfig) -> None:
     else:
         run_dir.mkdir(parents=True, exist_ok=True)
 
+    env_pyannote_token = os.environ.get("PYANNOTE_TOKEN")
+    hf_token, _ = resolve_hf_token(config.hf_token, env_pyannote_token)
+
     state = PipelineState(
         config=config,
         reporter=reporter,
         run_id=run_id,
         run_dir=run_dir,
         out_dir=out_dir,
-        env_info=EnvironmentInfo.collect(config.ffmpeg_path, config.hf_token, os.environ.get("PYANNOTE_TOKEN"), config.llm_host, config.llm_port),
+        env_info=EnvironmentInfo.collect(
+            config.ffmpeg_path, config.hf_token, env_pyannote_token, config.llm_host, config.llm_port
+        ),
+        hf_token=hf_token,
     )
-
-    hf_token = config.hf_token or os.environ.get("PYANNOTE_TOKEN")
     diarization_path = run_dir / "diarization.json"
     need_new_diarization = config.speakers != "1" and not (resume and diarization_path.exists())
     if need_new_diarization and hf_token is None:
         raise RuntimeError(
             append_env_details(
-                "pyannote の話者分離には Hugging Face Token が必要ですが、--hf-token と PYANNOTE_TOKEN のいずれも指定されていません。\n"
+                "pyannote の話者分離には Hugging Face Token が必要ですが、--hf-token と HF_TOKEN/PYANNOTE_TOKEN のいずれも指定されていません。\n"
                 f"{diarize._PYANNOTE_ACCESS_STEPS}\n{diarize._PYANNOTE_TOKEN_USAGE}",
                 state.env_info,
             )
