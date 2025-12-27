@@ -220,7 +220,7 @@ def _llm_review_transcription(
         "- 削除・省略は禁止。繰り返し表現もそのまま残すこと。\n"
         "- 修正は置換のみ。削除・追加は禁止（句読点/空白/全角半角の修正は例外）。\n"
         "- 英語に翻訳しないでください。\n"
-        "- 応答のJSONは、元の構造 {\"segments\": [...], \"text\": \"...\"} を完全に維持してください。"
+        "- 応答のJSONは、元の構造を完全に維持してください。"
     )
     conversation_lines = [seg["text"] for seg in result.segments]
     simplified = {"lines": conversation_lines}
@@ -230,17 +230,18 @@ def _llm_review_transcription(
         f"{json.dumps(simplified, ensure_ascii=False)}"
     )
     content = chat_completion(system_prompt=system_prompt, user_prompt=user_prompt, config=config, env_info=env_info)
-    # print(system_prompt)
-    # print(user_prompt)
+    print(system_prompt)
+    print(user_prompt)
     try:
         data = json.loads(content)
     except json.JSONDecodeError as exc:
         raise RuntimeError(append_env_details("LLM の応答を JSON として読み取れませんでした。", env_info)) from exc
 
     segments_in = data.get("lines")
+    print(segments_in)
+    print("----")
+    print(result.segments)
     if not isinstance(segments_in, list) or len(segments_in) != len(result.segments):
-        print(segments_in)
-        print(result.segments)
         raise RuntimeError(
             append_env_details("LLM の応答形式が不正です（行数が一致しません）。", env_info)
         )
