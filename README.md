@@ -177,7 +177,7 @@ python -m reportvox input.mp4 --speakers auto --mp3
 - --model: Whisper のモデルサイズ。
 - --speed-scale: VOICEVOX での読み上げ速度（デフォルト 1.1）。発話の間隔は維持されるため、音声全体の長さはほぼ変わりません。
 - --llm {none,openai,ollama}: LLMバックエンドの指定。
-- --style-with-llm: 口調変換で LLM を使用します (--llm でバックエンド指定)。
+- --no-style-with-llm: 口調変換で LLM を使用しない (--llm でバックエンド指定、デフォルトは使用)。`characters/<id>/meta.yaml` の `phrases.default` に設定した口癖は、LLM バックエンドが有効な場合にのみ反映されます。
 - --ollama-host: Ollamaのホスト名。
 - --ollama-port: Ollamaのポート番号。
 - --ollama-model: Ollamaで使用するモデル名。デフォルトは環境変数 LOCAL_LLM_MODEL または 'llama3'。
