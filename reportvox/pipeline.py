@@ -226,6 +226,7 @@ def _llm_review_transcription(
     *,
     config: PipelineConfig,
     run_dir: pathlib.Path,
+    prompt_log_path: pathlib.Path | None = None,
     env_info: EnvironmentInfo | None = None,
 ) -> transcribe.TranscriptionResult:
     # system_prompt = (
@@ -262,18 +263,26 @@ def _llm_review_transcription(
         "各行の順序と行数は絶対に変更しないでください。同じ JSON 構造で応答してください。\n"
         f"{json.dumps(simplified, ensure_ascii=False)}"
     )
+
+    if prompt_log_path is None:
+        prompt_log_path = run_dir / "transcript_review_llm_prompt.txt"
+
+    prompt_content = (
+        "=== Transcript Review LLM Prompt ===\n"
+        "[System]\n"
+        f"{system_prompt.strip()}\n\n"
+        "[User]\n"
+        f"{user_prompt.strip()}\n"
+    )
+    prompt_log_path.write_text(prompt_content, encoding="utf-8")
+
     content = chat_completion(system_prompt=system_prompt, user_prompt=user_prompt, config=config, env_info=env_info)
-    print(system_prompt)
-    print(user_prompt)
     try:
         data = json.loads(content)
     except json.JSONDecodeError as exc:
         raise RuntimeError(append_env_details("LLM の応答を JSON として読み取れませんでした。", env_info)) from exc
 
     segments_in = data.get("lines")
-    print(segments_in)
-    print("----")
-    print(result.segments)
     if not isinstance(segments_in, list) or len(segments_in) != len(result.segments):
         raise RuntimeError(
             append_env_details("LLM の応答形式が不正です（行数が一致しません）。", env_info)
@@ -645,17 +654,20 @@ def _step_transcribe(state: PipelineState) -> None:
                 reporter.log("LLM バックエンドが指定されていないため、誤字脱字の自動校正をスキップします (--llm で設定可能)。")
             else:
                 reporter.log("LLM で文字起こしを校正しています...")
+                prompt_log_path = run_dir / "transcript_review_llm_prompt.txt"
                 try:
                     whisper_result = _llm_review_transcription(
                         whisper_result,
                         config=config,
                         run_dir=run_dir,
+                        prompt_log_path=prompt_log_path,
                         env_info=env_info,
                     )
                     transcript_path.write_text(
                         json.dumps(whisper_result.as_json(), ensure_ascii=False, indent=2), encoding="utf-8"
                     )
                     reporter.log("LLM による校正を完了し、transcript.json を更新しました。")
+                    reporter.log(f"誤字脱字校正用プロンプトを {prompt_log_path.name} に保存しました。")
                 except Exception as exc:
                     reporter.log(f"LLM 校正に失敗したため、元の文字起こしで続行します: {exc}")
     state.complete_step("文字起こし工程が完了しました。", step_start)
