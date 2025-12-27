@@ -104,13 +104,8 @@ python -m reportvox input.wav --llm local --ollama-model gemma:2b
 python -m reportvox input.wav --review-transcript-llm --llm local
 ```
 
-### ローカル Gemini CLI で文字起こしを校正する
-`--llm gemini` を指定すると、Ollama の代わりにローカルの Gemini CLI を使って文字起こしを校正できます。
-
-- コマンドはツールが自動で呼び出します。ユーザーが独自のコマンド文字列を指定する必要はありません。
-- プロンプトは一時ファイルに書き出され、`gemini -p "@<一時ファイル>"` で呼び出します。
-- CLI からの応答が空だった場合や不正な形式だった場合はエラー扱いとなり、校正なしで処理を続行します。
-- Gemini は口調変換（スタイル調整）には使用せず、文字起こし校正専用です。
+### ローカル Gemini CLI での校正について
+以前は `--llm gemini` でローカルの Gemini CLI を使った校正に対応していましたが、現在は機能を無効化しています。再度利用可能になるまでは、OpenAI もしくは Ollama バックエンドをご利用ください。
 
 ### VOICEVOX Engine の起動
 
