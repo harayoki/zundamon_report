@@ -51,6 +51,7 @@ class PipelineConfig:
     review_transcript: TranscriptReviewMode = "llm"
     style_with_llm: bool = True
     diarization_threshold: float = 0.8
+    prepend_intro: bool = True
     intro1: Optional[str] = None
     intro2: Optional[str] = None
     video_images: list[pathlib.Path] = field(default_factory=list)

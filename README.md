@@ -168,6 +168,7 @@ python -m reportvox input.mp4 --speakers auto --mp3
 - --speaker2: 副話者に割り当てるキャラクターID。
 - --intro1: 話者1の最初の挨拶文を指定します。
 - --intro2: 話者2の最初の挨拶文を指定します。
+- --no-intro: 最初の挨拶文の自動挿入を無効化します。
 - --zunda-senior-job, --zunda-junior-job: speaker1がずんだもんの場合のデフォルト挨拶を生成します（--intro1が指定されている場合はそちらが優先されます）。
 - --speakers {auto,1,2}: 話者数の扱い。
 - --diarization-threshold: 話者分離のクラスタリング閾値（0.0-1.0）。値が低いほど、声質が似ている話者も別人として分離されやすくなります。デフォルトは 0.8。
