@@ -184,8 +184,8 @@ python -m reportvox input.mp4 --speakers auto --mp3
 - --hf-token: Hugging Face Token。
 - --mp3: mp3 を生成（out/ には mp3 だけを出力）。
 - --bitrate: mp3 出力時のビットレート。
-- --mp4: 字幕焼き込み済みの mp4 を生成。
-- --mov: 透明背景の mov (ProRes 4444) を生成。
+- --mp4: 字幕入りの mp4 を生成。
+- --mov: 字幕入り・透明背景の mov (ProRes 4444) を生成。
 - --video-width / --video-height: 動画の解像度をピクセルで指定（デフォルト 1920x1080）。
 - --video-fps: 動画のフレームレート。デフォルト 24 fps。
 - --video-images: 動画上に順番に表示する画像ファイルのパスを指定（複数指定可）。
