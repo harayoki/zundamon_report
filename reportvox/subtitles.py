@@ -277,6 +277,29 @@ def _escape_ass_text(text: str) -> str:
     return text.replace("\\", r"\\").replace("{", r"\\{").replace("}", r"\\}").replace("\n", r"\\N")
 
 
+def _wrap_ass_text_to_two_lines(text: str, *, include_label: bool, max_chars: int | None, is_portrait: bool) -> str:
+    """縦長動画向けに ASS 用字幕テキストを 2 行に折り返す。
+
+    max_chars を超える長さのテキストを対象とし、ラベルは先頭行に残したまま
+    2 行目に残りをまとめる。max_chars が未指定または 0 以下の場合や、
+    縦長動画でない場合は折り返しを行わずそのまま返す。
+    """
+
+    if not is_portrait or not max_chars or max_chars <= 0:
+        return text
+
+    chunks = _split_text(text, include_label=include_label, max_chars=max_chars)
+    if len(chunks) <= 1:
+        return text
+
+    first_line = chunks[0].strip()
+    second_line = "".join(chunk.strip() for chunk in chunks[1:])
+    if not second_line:
+        return first_line
+
+    return f"{first_line}\n{second_line}"
+
+
 def write_ass_subtitles(
     segments: Sequence[StylizedSegment],
     *,
@@ -292,6 +315,7 @@ def write_ass_subtitles(
 
     play_res_x, play_res_y = resolution
     font_name = font or "Noto Sans JP"
+    is_portrait = play_res_y > play_res_x
 
     exploded = _explode_segments(
         segments,
@@ -337,7 +361,13 @@ def write_ass_subtitles(
 
     for seg in exploded:
         style_name = seg.character if seg.character in characters else "default"
-        text = _escape_ass_text(seg.text)
+        wrapped = _wrap_ass_text_to_two_lines(
+            seg.text,
+            include_label=True,
+            max_chars=max_chars_per_line,
+            is_portrait=is_portrait,
+        )
+        text = _escape_ass_text(wrapped)
         events.append(
             "Dialogue: 0," f"{_format_ass_timestamp(seg.start)}," f"{_format_ass_timestamp(seg.end)}," f"{style_name},,0,0,0,,{text}"
         )
