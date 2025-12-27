@@ -54,6 +54,8 @@ pip install "numpy<2"
 ## ローカルLLM (Ollama) との連携
 文字起こし結果の自動校正 (`--review-transcript-llm`) などで、ローカルで動作するLLMと連携することができます。本ツールではOllama経由での利用を想定しています。
 
+OpenAI API を使う場合の概算コストやモデル切り替え時の課金イメージは、`docs/openai_pricing.md` にまとめています（GPT-4o / GPT-4o Mini など）。
+
 ### 1. Ollamaのインストール
 以下の公式サイトからOllamaをダウンロードし、インストールしてください。
 - [https://ollama.com/](https://ollama.com/)
