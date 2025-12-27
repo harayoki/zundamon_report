@@ -216,15 +216,18 @@ def _llm_review_transcription(
         "- 助詞、活用形、敬語、言い回し、同義語への置換を一切禁止します。\n"
         "- 話し手の意図や発言内容、意味、ニュアンスを絶対に変えないでください。\n"
         "- 固有名詞を絶対に変更しないでください。\n"
-        "- segments配列のstart/endの値、および配列の長さは絶対に変更しないでください。\n"
+        "- segments 配列の長さを絶対に変更しないでください（順序も固定）。\n"
         "- 削除・省略は禁止。繰り返し表現もそのまま残すこと。\n"
         "- 修正は置換のみ。削除・追加は禁止（句読点/空白/全角半角の修正は例外）。\n"
         "- 英語に翻訳しないでください。\n"
         "- 応答のJSONは、元の構造 {\"segments\": [...], \"text\": \"...\"} を完全に維持してください。"
     )
+    conversation_lines = [seg["text"] for seg in result.segments]
+    simplified = {"lines": conversation_lines}
     user_prompt = (
-        "以下のJSONに含まれる `text` と `segments[*].text` の内容を、上記のルールに従って校正してください。\n"
-        f"{json.dumps(result.as_json(), ensure_ascii=False)}"
+        "以下のJSONに含まれる会話テキスト（1 行につき 1 発話）を、上記のルールに従って校正してください。"
+        "各行の順序と行数は絶対に変更しないでください。同じ JSON 構造で応答してください。\n"
+        f"{json.dumps(simplified, ensure_ascii=False)}"
     )
     content = chat_completion(system_prompt=system_prompt, user_prompt=user_prompt, config=config, env_info=env_info)
     # print(system_prompt)
@@ -234,22 +237,22 @@ def _llm_review_transcription(
     except json.JSONDecodeError as exc:
         raise RuntimeError(append_env_details("LLM の応答を JSON として読み取れませんでした。", env_info)) from exc
 
-    segments_in = data.get("segments")
+    segments_in = data.get("lines")
     if not isinstance(segments_in, list) or len(segments_in) != len(result.segments):
         print(segments_in)
         print(result.segments)
         raise RuntimeError(
-            append_env_details("LLM の応答形式が不正です（segments の数が一致しません）。", env_info)
+            append_env_details("LLM の応答形式が不正です（行数が一致しません）。", env_info)
         )
 
     reviewed_segments: list[dict] = []
     for original, revised in zip(result.segments, segments_in):
-        text = revised.get("text", original.get("text", ""))
+        text = revised if isinstance(revised, str) else original.get("text", "")
         reviewed_segments.append(
             {"start": float(original["start"]), "end": float(original["end"]), "text": str(text).strip()}
         )
 
-    reviewed_text = str(data.get("text", result.text)).strip()
+    reviewed_text = "\n".join(str(item).strip() for item in segments_in)
     reviewed_result = transcribe.TranscriptionResult(segments=reviewed_segments, text=reviewed_text)
 
     diff = difflib.unified_diff(
