@@ -260,8 +260,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--style-with-llm",
-        action="store_true",
-        help="口調変換で LLM を使用します (--llm でバックエンド指定)。",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="口調変換で LLM を使用します (--llm でバックエンド指定)。無効化する場合は --no-style-with-llm を指定してください。",
     )
     parser.add_argument(
         "--resume-from",
