@@ -77,6 +77,29 @@ def _estimate_remaining(total_steps: int, steps_done: int, elapsed: float) -> fl
     return avg * (total_steps - steps_done)
 
 
+def _extract_json_payload(text: str) -> str:
+    """LLM 応答から JSON 本文を抽出する。
+
+    Markdown のコードブロックや前後の文章に囲まれていても、最初の
+    JSON オブジェクト部分を取り出す。
+    """
+
+    trimmed = text.strip()
+
+    fence_match = re.fullmatch(r"```(?:json)?\n(.*?)\n```", trimmed, flags=re.DOTALL)
+    if fence_match:
+        trimmed = fence_match.group(1).strip()
+
+    if trimmed.startswith("{") and trimmed.endswith("}"):
+        return trimmed
+
+    brace_match = re.search(r"\{.*\}", trimmed, flags=re.DOTALL)
+    if brace_match:
+        return brace_match.group(0)
+
+    return trimmed
+
+
 def _ensure_paths() -> tuple[pathlib.Path, pathlib.Path]:
     work_dir = pathlib.Path("work")
     out_dir = pathlib.Path("out")
@@ -1207,7 +1230,8 @@ def _decide_zunda_jobs(
             config=config,
             env_info=env_info,
         )
-        data = json.loads(content)
+        payload = _extract_json_payload(content)
+        data = json.loads(payload)
         senior_job = str(data.get("zunda_senior_job", "")).strip()
         junior_job = str(data.get("zunda_junior_job", "")).strip()
     except json.JSONDecodeError as exc:
