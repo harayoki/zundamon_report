@@ -154,6 +154,10 @@ python -m reportvox input.wav --subtitles split  # 話者ごとに別ファイ�
 # 字幕付きの動画 (mp4/mov) を出力
 python -m reportvox input.wav --mp4  # mp4 を生成
 python -m reportvox input.wav --mov --video-width 1280 --video-height 720 --video-fps 30  # 透明movをHD/30fpsで生成
+# 動画上に複数画像を順番に表示（デフォルトでは尺を等分して表示）
+python -m reportvox input.wav --mp4 --video-images image1.png image2.png image3.png
+# 画像の開始秒や位置・拡大率をまとめて指定
+python -m reportvox input.wav --mp4 --video-images image1.png image2.png --video-image-times 5 18 --video-image-pos 900,520 --video-image-scale 0.4
 
 # 動画ファイルも入力可、MP3も生成
 python -m reportvox input.mp4 --speakers auto --mp3

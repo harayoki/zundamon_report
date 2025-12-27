@@ -812,6 +812,7 @@ def _step_finalize(state: PipelineState) -> None:
 
     ass_path: pathlib.Path | None = None
     audio_for_video = output_wav if output_wav.exists() else temp_wav
+    image_overlays: list[tuple[pathlib.Path, float, float]] = []
 
     if need_video:
         if subtitle_segments is None:
@@ -830,6 +831,15 @@ def _step_finalize(state: PipelineState) -> None:
         )
         reporter.log(f"字幕ASSを生成しました -> {ass_path.name}")
 
+        if config.video_images:
+            video_duration = audio.read_wav_duration(audio_for_video)
+            image_overlays = video.build_image_overlays(
+                config.video_images,
+                video_duration=video_duration,
+                start_times=config.video_image_times,
+                env_info=env_info,
+            )
+
     if need_video and ass_path is not None:
         if not audio_for_video.exists():
             raise FileNotFoundError(append_env_details("動画出力用の音声ファイルが見つかりません。", env_info))
@@ -847,6 +857,9 @@ def _step_finalize(state: PipelineState) -> None:
                 fps=config.video_fps,
                 transparent=False,
                 env_info=env_info,
+                overlays=image_overlays,
+                image_scale=config.video_image_scale,
+                image_position=config.video_image_position,
             )
             state.complete_step("mp4 生成が完了しました。", step_start)
 
@@ -864,6 +877,9 @@ def _step_finalize(state: PipelineState) -> None:
                 fps=config.video_fps,
                 transparent=True,
                 env_info=env_info,
+                overlays=image_overlays,
+                image_scale=config.video_image_scale,
+                image_position=config.video_image_position,
             )
             state.complete_step("mov 生成が完了しました。", step_start)
 

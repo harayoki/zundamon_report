@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import pathlib
 from typing import Literal, Optional
 
@@ -53,3 +53,7 @@ class PipelineConfig:
     diarization_threshold: float = 0.8
     intro1: Optional[str] = None
     intro2: Optional[str] = None
+    video_images: list[pathlib.Path] = field(default_factory=list)
+    video_image_scale: float = 0.35
+    video_image_position: tuple[int, int] | None = None
+    video_image_times: list[float] | None = None

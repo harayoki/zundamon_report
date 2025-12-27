@@ -39,6 +39,26 @@ def _positive_nonzero_int(value: str) -> int:
     return number
 
 
+def _non_negative_float(value: str) -> float:
+    try:
+        number = float(value)
+    except ValueError as exc:  # pragma: no cover - argparse handles messaging
+        raise argparse.ArgumentTypeError(f"数値を指定してください: {value}") from exc
+    if number < 0:
+        raise argparse.ArgumentTypeError(f"0 以上の数を指定してください: {value}")
+    return number
+
+
+def _xy_pair(value: str) -> tuple[int, int]:
+    try:
+        x_str, y_str = value.split(",", maxsplit=1)
+        x_pos = int(x_str)
+        y_pos = int(y_str)
+    except Exception as exc:  # pragma: no cover - argparse handles messaging
+        raise argparse.ArgumentTypeError("位置は 'X,Y' 形式の整数で指定してください。") from exc
+    return (x_pos, y_pos)
+
+
 def _port(value: str) -> int:
     try:
         number = int(value)
@@ -190,6 +210,33 @@ def build_parser() -> argparse.ArgumentParser:
         help="動画出力時のフレームレート。",
     )
     parser.add_argument(
+        "--video-images",
+        nargs="+",
+        default=[],
+        metavar="PATH",
+        help="動画上に順番に表示する画像ファイルのパスを指定します（スペース区切りで複数指定）。",
+    )
+    parser.add_argument(
+        "--video-image-scale",
+        type=_positive_float,
+        default=0.35,
+        help="動画に重ねる画像の拡大率。1.0 が原寸で、すべての画像に共通します。",
+    )
+    parser.add_argument(
+        "--video-image-pos",
+        type=_xy_pair,
+        default=None,
+        help="画像の表示位置をピクセル単位で指定します（左上基準 'X,Y'）。省略時は字幕と重ならない位置に自動配置。",
+    )
+    parser.add_argument(
+        "--video-image-times",
+        nargs="+",
+        type=_non_negative_float,
+        default=None,
+        metavar="SECONDS",
+        help="各画像の表示開始秒を指定します（0 始まりでなくても可）。未指定時は動画尺を画像数で等分します。",
+    )
+    parser.add_argument(
         "--review-transcript",
         action="store_true",
         help="文字起こし保存後に処理を停止し、transcript.json を手動で修正するために終了します。再開用コマンドを表示します。",
@@ -232,8 +279,13 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
         parser.error("--review-transcript と --review-transcript-llm は同時に指定できません。")
     if args.skip_review_transcript and (args.review_transcript or args.review_transcript_llm):
         parser.error("--skip-review-transcript は他の誤字脱字校正オプションと同時に指定できません。")
+    if args.video_image_times is not None and not args.video_images:
+        parser.error("--video-image-times を使用する場合は --video-images も指定してください。")
+    if args.video_image_times is not None and len(args.video_image_times) != len(args.video_images):
+        parser.error("--video-image-times の数は --video-images に指定した画像数と一致させてください。")
 
     input_path = pathlib.Path(args.input).expanduser().resolve() if args.input else None
+    video_images = [pathlib.Path(p).expanduser().resolve() for p in args.video_images]
     review_mode = "llm"
     if args.skip_review_transcript:
         review_mode = "off"
@@ -278,6 +330,10 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
         diarization_threshold=args.diarization_threshold,
         intro1=args.intro1,
         intro2=args.intro2,
+        video_images=video_images,
+        video_image_scale=args.video_image_scale,
+        video_image_position=args.video_image_pos,
+        video_image_times=args.video_image_times,
     )
 
 
