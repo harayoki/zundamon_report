@@ -878,7 +878,7 @@ def _step_finalize(state: PipelineState) -> None:
 
     need_video = config.output_mp4 or config.output_mov
     subtitle_segments: list[style_convert.StylizedSegment] | None = None
-    max_chars = 0 if config.style_with_llm else config.subtitle_max_chars
+    max_chars = config.subtitle_max_chars
 
     if config.subtitle_mode != "off" or need_video:
         subtitle_segments = subtitles.align_segments_to_audio(
