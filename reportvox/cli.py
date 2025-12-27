@@ -165,6 +165,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--model", default="large-v3", choices=['tiny', 'base', 'small', 'medium', 'large', 'large-v1', 'large-v2', 'large-v3'], help="利用する Whisper モデルサイズ（tiny/base/small/medium/large-v3）。")
     parser.add_argument("--speed-scale", type=_positive_float, default=1.1, help="VOICEVOX の speedScale を指定（デフォルト 1.1）。")
     parser.add_argument(
+        "--max-pause",
+        type=_non_negative_float,
+        default=0.2,
+        help="セリフ間の無音をこの秒数までに詰めて結合します（デフォルト 0.2）。0 で詰めない。",
+    )
+    parser.add_argument(
         "--resume",
         dest="resume_run_id",
         default=None,
@@ -337,6 +343,7 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
         llm_port=args.ollama_port,
         ollama_model=args.ollama_model,
         speed_scale=args.speed_scale,
+        max_pause_between_segments=args.max_pause,
         resume_run_id=args.resume_run_id,
         resume_from=args.resume_from,
         subtitle_mode=args.subtitles,
