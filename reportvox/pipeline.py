@@ -253,12 +253,15 @@ def _llm_review_transcription(
             {"start": float(original["start"]), "end": float(original["end"]), "text": str(text).strip()}
         )
 
-    reviewed_text = "\n".join(str(item).strip() for item in segments_in)
+    reviewed_text = "\n".join(str(seg.get("text", "")) for seg in reviewed_segments)
     reviewed_result = transcribe.TranscriptionResult(segments=reviewed_segments, text=reviewed_text)
 
+    def _format_transcription_for_diff(segments: Sequence[dict]) -> list[str]:
+        return [f"{str(seg.get('text', '')).strip()}\n" for seg in segments]
+
     diff = difflib.unified_diff(
-        result.text.splitlines(keepends=True),
-        reviewed_result.text.splitlines(keepends=True),
+        _format_transcription_for_diff(result.segments),
+        _format_transcription_for_diff(reviewed_segments),
         fromfile="before_llm_review.txt",
         tofile="after_llm_review.txt",
     )
