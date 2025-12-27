@@ -486,6 +486,14 @@ def _step_prepare_input(state: PipelineState) -> None:
     env_info = state.env_info
     resume = config.resume_run_id is not None
 
+    if config.video_images:
+        missing_images = [path for path in config.video_images if not path.exists()]
+        if missing_images:
+            missing_list = ", ".join(str(path) for path in missing_images)
+            raise FileNotFoundError(
+                append_env_details(f"指定された動画用画像が見つかりません: {missing_list}", env_info)
+            )
+
     reporter.log("ffmpeg の利用可否を確認しています...")
     step_start = reporter.now()
     resolved_ffmpeg = audio.ensure_ffmpeg(config.ffmpeg_path, env_info=env_info)
