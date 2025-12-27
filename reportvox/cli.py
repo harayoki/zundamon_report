@@ -129,10 +129,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="ずんだもんの自己紹介など、最初の挨拶文の自動挿入を無効化します。",
     )
     parser.add_argument(
-        "--zunda-senior-job", dest="zunda_senior_job", default=None, help="ずんだもんが憧れる職業を指定（--zunda-junior-job と併用）。"
+        "--zunda-senior-job",
+        dest="zunda_senior_job",
+        default=None,
+        help="ずんだもんが憧れる職業を指定（--zunda-junior-job と併用、省略時はLLMで自動決定）。",
     )
     parser.add_argument(
-        "--zunda-junior-job", dest="zunda_junior_job", default=None, help="ずんだもんの現在の役割を指定（--zunda-senior-job と併用）。"
+        "--zunda-junior-job",
+        dest="zunda_junior_job",
+        default=None,
+        help="ずんだもんの現在の役割を指定（--zunda-senior-job と併用、省略時はLLMで自動決定）。",
     )
     parser.add_argument("--mp3", action="store_true", help="mp3 を生成（out/ には mp3 だけを出力）。")
     parser.add_argument("--bitrate", default="192k", help="mp3 出力時のビットレート（--mp3 使用時のみ）。")
