@@ -64,9 +64,28 @@ def _load_saved_cli_args(run_id: str) -> list[str] | None:
     return None
 
 
-def _merge_resume_cli_args(saved_args: list[str], current_args: list[str], resume_run_id: str) -> list[str]:
+def _strip_input_argument(argv: Sequence[str], input_value: str | None) -> list[str]:
+    if input_value is None:
+        return list(argv)
+
+    stripped: list[str] = []
+    removed = False
+    for item in argv:
+        if not removed and item == input_value:
+            removed = True
+            continue
+        stripped.append(item)
+    return stripped
+
+
+def _merge_resume_cli_args(
+    saved_args: list[str], current_args: list[str], resume_run_id: str, *, current_input: str | None
+) -> list[str]:
     merged = _strip_resume_flags(saved_args)
-    merged.extend(_strip_resume_flags(current_args))
+
+    sanitized_current = _strip_resume_flags(current_args)
+    sanitized_current = _strip_input_argument(sanitized_current, current_input)
+    merged.extend(sanitized_current)
     merged.extend(["--resume", resume_run_id])
     return merged
 
@@ -332,7 +351,9 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
     if args.resume_run_id:
         saved_cli_args = _load_saved_cli_args(args.resume_run_id)
         if saved_cli_args:
-            merged_argv = _merge_resume_cli_args(saved_cli_args, argv_list, args.resume_run_id)
+            merged_argv = _merge_resume_cli_args(
+                saved_cli_args, argv_list, args.resume_run_id, current_input=args.input
+            )
             args = parser.parse_args(merged_argv)
             cli_args_used = _strip_resume_flags(merged_argv)
         else:
