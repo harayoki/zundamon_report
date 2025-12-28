@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import pathlib
 import sys
@@ -18,6 +19,56 @@ from reportvox.video_cli import (
     add_video_arguments,
     validate_video_image_args,
 )
+
+
+_METADATA_FILENAME = "metadata.json"
+
+
+def _strip_resume_flags(argv: Sequence[str]) -> list[str]:
+    sanitized: list[str] = []
+    skip_next = False
+    for item in argv:
+        if skip_next:
+            skip_next = False
+            continue
+        if item == "--resume":
+            skip_next = True
+            continue
+        if item.startswith("--resume="):
+            continue
+        sanitized.append(item)
+    return sanitized
+
+
+def _load_saved_cli_args(run_id: str) -> list[str] | None:
+    metadata_path = pathlib.Path("work") / run_id / _METADATA_FILENAME
+    try:
+        data = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except json.JSONDecodeError:
+        print(
+            f"警告: {metadata_path} の読み込みに失敗しました。現在の引数のみで再開します。",
+            file=sys.stderr,
+        )
+        return None
+
+    cli_args = data.get("cli_args") if isinstance(data, dict) else None
+    if isinstance(cli_args, list) and all(isinstance(arg, str) for arg in cli_args):
+        return list(cli_args)
+
+    print(
+        f"警告: {metadata_path} に cli_args が記録されていません。現在の引数のみで再開します。",
+        file=sys.stderr,
+    )
+    return None
+
+
+def _merge_resume_cli_args(saved_args: list[str], current_args: list[str], resume_run_id: str) -> list[str]:
+    merged = _strip_resume_flags(saved_args)
+    merged.extend(_strip_resume_flags(current_args))
+    merged.extend(["--resume", resume_run_id])
+    return merged
 
 
 def _positive_float(value: str) -> float:
@@ -231,7 +282,19 @@ def build_parser() -> argparse.ArgumentParser:
 
 def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
     parser = build_parser()
-    args = parser.parse_args(argv)
+    argv_list = list(sys.argv[1:] if argv is None else argv)
+    args = parser.parse_args(argv_list)
+
+    cli_args_used = _strip_resume_flags(argv_list)
+
+    if args.resume_run_id:
+        saved_cli_args = _load_saved_cli_args(args.resume_run_id)
+        if saved_cli_args:
+            merged_argv = _merge_resume_cli_args(saved_cli_args, argv_list, args.resume_run_id)
+            args = parser.parse_args(merged_argv)
+            cli_args_used = _strip_resume_flags(merged_argv)
+        else:
+            cli_args_used = _strip_resume_flags(argv_list)
 
     if args.input is None and args.resume_run_id is None:
         parser.error("--resume を指定しない場合は入力ファイルが必要です。")
@@ -298,6 +361,7 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
         video_image_scale=args.video_image_scale,
         video_image_position=args.video_image_pos,
         video_image_times=args.video_image_times,
+        cli_args=cli_args_used,
     )
 
 
