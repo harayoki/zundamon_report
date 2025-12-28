@@ -217,6 +217,24 @@ def _resolve_audio_from_run(metadata: dict, run_dir: pathlib.Path | None) -> pat
     return None
 
 
+def _load_audio_source_from_run(run_dir: pathlib.Path | None) -> pathlib.Path | None:
+    if run_dir is None:
+        return None
+    record_path = run_dir / "audio_source.txt"
+    if not record_path.exists():
+        return None
+
+    recorded = record_path.read_text(encoding="utf-8").strip()
+    if not recorded:
+        return None
+
+    recorded_path = pathlib.Path(recorded)
+    if not recorded_path.is_absolute():
+        recorded_path = (run_dir / recorded_path).resolve()
+
+    return recorded_path.expanduser().resolve()
+
+
 def _resolve_output_path(args_output: pathlib.Path | None, metadata: dict, audio_path: pathlib.Path | None) -> pathlib.Path:
     if args_output is not None:
         return args_output
@@ -233,6 +251,11 @@ def _prepare_work_dir(run_dir: pathlib.Path | None) -> tuple[pathlib.Path, bool]
         return run_dir, False
     tmp = pathlib.Path(tempfile.mkdtemp(prefix="reportvox_mp4_"))
     return tmp, True
+
+
+def _record_audio_path(work_dir: pathlib.Path, audio_path: pathlib.Path) -> None:
+    record_path = work_dir / "audio_source.txt"
+    record_path.write_text(str(audio_path), encoding="utf-8")
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -257,7 +280,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     placements_path = placements_path.expanduser().resolve()
     segments_dir = segments_dir.expanduser().resolve()
 
-    audio_path = args.audio or _resolve_audio_from_run(metadata, run_dir)
+    audio_path = args.audio or _load_audio_source_from_run(run_dir) or _resolve_audio_from_run(metadata, run_dir)
     if audio_path is None:
         parser.error("音声ファイルを特定できませんでした。--audio を指定してください。")
     audio_path = audio_path.expanduser().resolve()
@@ -321,6 +344,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     subtitle_segments = subtitles.merge_subtitle_segments(aligned_segments)
 
     work_dir, should_cleanup = _prepare_work_dir(run_dir)
+
+    _record_audio_path(work_dir, audio_path)
 
     try:
         normalized_audio = _ensure_wav(audio_path, work_dir, ffmpeg_path=ffmpeg_path, env_info=env_info)
