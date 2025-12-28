@@ -1437,43 +1437,98 @@ def _insert_line_breaks(
     if not config.linebreak_with_llm or config.llm_backend == "none":
         return list(segments)
 
+    long_segments: list[tuple[int, style_convert.StylizedSegment]] = [
+        (idx, seg) for idx, seg in enumerate(segments) if len(seg.text) > config.linebreak_min_chars
+    ]
+
+    if not long_segments:
+        return list(segments)
+
     adjusted: list[style_convert.StylizedSegment] = []
 
-    for seg in segments:
-        if len(seg.text) <= config.linebreak_min_chars:
-            adjusted.append(seg)
+    system_prompt = (
+        "あなたは日本語のセリフを整形するアシスタントです。\n"
+        "以下の規則に従ってください:\n"
+        "- 語句や順序を一切変更せず、必要なら改行(\\n)を1〜2回だけ挿入するだけにしてください。\n"
+        "- 改行は必ず実際の改行文字のみを使い、\\N や \\\\N のような文字列は絶対に使わないでください。\n"
+        "- 整形後のセリフのみを返し、説明や番号付け、余計な記号は入れないでください。\n"
+        "- 改行が不要なら元のセリフをそのまま返してください。\n"
+        "- 各セグメントは <SEG id=...> と </SEG> で囲み、id は入力と同じものを使ってください。"
+    )
+    lines: list[str] = [
+        f"次のセリフが{config.linebreak_min_chars}文字を超えて長い場合に、句読点や自然な区切りで最小限の改行を入れてください。",
+        "1つのセグメントは2行程度までにとどめ、不要な連続改行は入れないでください。",
+        "読みやすさが目的なので、言い回しや句読点は変えないでください。",
+        "入力と同じ順序で、各セグメントを <SEG id=...> で囲んで返してください。",
+    ]
+
+    for idx, seg in long_segments:
+        lines.append(f"<SEG id={idx}>")
+        lines.append(seg.text)
+        lines.append("</SEG>")
+
+    user_prompt = "\n".join(lines)
+
+    if prompt_logger:
+        prompt_logger(system_prompt, user_prompt)
+
+    response_map: dict[int, str] = {}
+
+    try:
+        content = chat_completion(system_prompt=system_prompt, user_prompt=user_prompt, config=config)
+    except Exception:
+        content = ""
+
+    if content and re.search(r"\\{1,2}N", content):
+        raise ValueError("LLM 応答に許可されていないエスケープ表現 (\\N など) が含まれています。")
+
+    if content:
+        for match in re.finditer(r"<SEG id=(\d+)>\s*(.*?)\s*</SEG>", content, re.DOTALL):
+            try:
+                seg_id = int(match.group(1))
+            except ValueError:
+                continue
+            text = match.group(2).strip()
+            if text:
+                response_map[seg_id] = text
+
+    for idx, seg in enumerate(segments):
+        new_text = response_map.get(idx, seg.text)
+        lines = [line.strip() for line in new_text.splitlines()]
+        lines = [line for line in lines if line]
+
+        if not lines:
+            lines = [seg.text]
+
+        if len(lines) == 1:
+            adjusted.append(
+                style_convert.StylizedSegment(
+                    start=seg.start,
+                    end=seg.end,
+                    text=lines[0],
+                    speaker=seg.speaker,
+                    character=seg.character,
+                )
+            )
             continue
 
-        system_prompt = (
-            "あなたは日本語のセリフを整形するアシスタントです。\n"
-            "以下の規則に従ってください:\n"
-            "- 語句や順序を一切変更せず、必要なら改行(\\n)を挿入するだけにしてください。\n"
-            "- 整形後のセリフのみを返し、説明や番号付け、余計な記号は入れないでください。\n"
-            "- 改行が不要なら元のセリフをそのまま返してください。\n"
-        )
-        user_prompt = (
-            f"次のセリフが{config.linebreak_min_chars}文字を超えて長い場合に、句読点や自然な区切りで改行を入れてください。\n"
-            "読みやすさが目的なので、言い回しや句読点は変えないでください。\n"
-            f"セリフ: {seg.text}"
-        )
+        duration = seg.end - seg.start
+        if duration > 0:
+            step = duration / len(lines)
+        else:
+            step = 0.0
 
-        if prompt_logger:
-            prompt_logger(system_prompt, user_prompt)
-
-        try:
-            content = chat_completion(system_prompt=system_prompt, user_prompt=user_prompt, config=config)
-            new_text = content.strip() or seg.text
-        except Exception:
-            new_text = seg.text
-
-        adjusted.append(
-            style_convert.StylizedSegment(
-                start=seg.start,
-                end=seg.end,
-                text=new_text,
-                speaker=seg.speaker,
-                character=seg.character,
+        for i, line in enumerate(lines):
+            start = seg.start + step * i
+            end = seg.start + step * (i + 1) if i < len(lines) - 1 else seg.end
+            adjusted.append(
+                style_convert.StylizedSegment(
+                    start=start,
+                    end=end,
+                    text=line,
+                    speaker=seg.speaker,
+                    character=seg.character,
+                )
             )
-        )
 
     return adjusted
