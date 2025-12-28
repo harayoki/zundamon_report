@@ -81,6 +81,56 @@ def normalize_to_wav(
     return dest
 
 
+def slice_wav_segment(
+    src: pathlib.Path,
+    dest: pathlib.Path,
+    *,
+    start: float,
+    end: float,
+    ffmpeg_path: str = "ffmpeg",
+    env_info: EnvironmentInfo | None = None,
+) -> pathlib.Path:
+    """WAV の一部を切り出す。"""
+
+    if start < 0:
+        raise ValueError(append_env_details("開始秒には 0 以上の値を指定してください。", env_info))
+    if end <= start:
+        raise ValueError(append_env_details("終了秒は開始秒より大きい値を指定してください。", env_info))
+
+    cmd = [
+        ffmpeg_path,
+        "-y",
+        "-ss",
+        f"{start:.3f}",
+        "-to",
+        f"{end:.3f}",
+        "-i",
+        str(src),
+        "-c",
+        "copy",
+        str(dest),
+    ]
+
+    try:
+        subprocess.run(
+            cmd,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+        )
+    except subprocess.CalledProcessError as exc:
+        error_output = exc.stderr or ""
+        raise RuntimeError(
+            append_env_details(
+                f"ffmpeg による音声の切り出しに失敗しました。ffmpegからのエラー:\n{error_output}", env_info
+            )
+        ) from exc
+
+    return dest
+
+
 def _read_params(path: pathlib.Path) -> tuple[int, int, int, int]:
     with wave.open(str(path), "rb") as wf:
         return (wf.getnchannels(), wf.getsampwidth(), wf.getframerate(), wf.getnframes())

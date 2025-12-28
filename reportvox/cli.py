@@ -181,6 +181,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--bitrate", default="192k", help="mp3 出力時のビットレート（--mp3 使用時のみ）。")
     parser.add_argument("--mp4", action="store_true", help="字幕付きの mp4 動画を生成します。")
     parser.add_argument("--mov", action="store_true", help="字幕付きの透明 mov 動画を生成します。")
+    parser.add_argument(
+        "--video-split",
+        action="store_true",
+        default=False,
+        help="動画尺が 3 分を超えそうな場合に分割出力を有効化します（デフォルト: 無効）。",
+    )
     parser.add_argument("--ffmpeg-path", default="ffmpeg", help="ffmpeg 実行ファイルへのパス（コマンド名またはフルパス）。")
     parser.add_argument(
         "--output-name",
@@ -387,6 +393,7 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
         video_fps=args.video_fps,
         output_mp4=args.mp4,
         output_mov=args.mov,
+        video_split=args.video_split,
         review_transcript=review_mode,
         style_with_llm=args.style_with_llm,
         linebreak_with_llm=args.linebreak_with_llm,

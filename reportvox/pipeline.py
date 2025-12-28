@@ -120,6 +120,9 @@ def _slugify_for_cache(path: pathlib.Path) -> str:
     return f"{safe}_{digest}"
 
 
+_VIDEO_PART_LIMIT = 179.0
+
+
 def _create_prompt_logger(path: pathlib.Path, title: str) -> style_convert.LLMPromptLogger:
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -465,6 +468,7 @@ def _write_run_metadata(state: "PipelineState") -> None:
         "video_image_scale": state.config.video_image_scale,
         "video_image_position": state.config.video_image_position,
         "video_image_times": state.config.video_image_times,
+        "video_split": state.config.video_split,
         "ffmpeg_path": state.config.ffmpeg_path,
     }
     path = state.run_dir / "metadata.json"
@@ -634,6 +638,15 @@ class PipelineState:
         self.steps_done += 1
         remaining = _estimate_remaining(self.total_steps, self.steps_done, self.reporter.elapsed())
         self.reporter.log(message, step_duration=duration, remaining=remaining)
+
+
+@dataclass
+class VideoPartPlan:
+    index: int
+    start: float
+    end: float
+    subtitle_segments: list[style_convert.StylizedSegment]
+    overlays: list[tuple[pathlib.Path, float, float]]
 
 
 def _step_prepare_input(state: PipelineState) -> None:
@@ -1019,6 +1032,276 @@ def _step_concatenate(state: PipelineState) -> None:
     state.placements = placements
 
 
+def _summarize_segments_for_prompt(segments: Sequence[style_convert.StylizedSegment]) -> str:
+    lines: list[str] = []
+    for seg in segments:
+        label = seg.character or seg.speaker or "speaker"
+        text = seg.text.replace("\n", " ").strip()
+        if len(text) > 70:
+            text = text[:67] + "..."
+        lines.append(f"- {seg.start:.1f}-{seg.end:.1f}s [{label}] {text}")
+    return "\n".join(lines)
+
+
+def _segment_boundaries(segments: Sequence[style_convert.StylizedSegment], total_duration: float) -> list[float]:
+    return sorted({seg.end for seg in segments if 0 < seg.end < total_duration})
+
+
+def _suggest_video_boundaries_with_llm(
+    segments: Sequence[style_convert.StylizedSegment],
+    *,
+    total_duration: float,
+    config: PipelineConfig,
+    run_dir: pathlib.Path,
+    reporter: _ProgressReporter,
+    env_info: EnvironmentInfo,
+) -> list[float] | None:
+    prompt_logger = _create_prompt_logger(run_dir / "prompt_video_split_llm.log", "Video Split LLM Prompt")
+    segment_outline = _summarize_segments_for_prompt(segments)
+
+    system_prompt = (
+        "あなたは動画編集のアシスタントです。字幕セグメントの区切りだけを使って動画を複数のパートに分割します。\n"
+        "- 各パートの長さは180秒未満にしてください。\n"
+        "- 分割点は必ずセグメント間に置き、セグメント途中では分割しません。\n"
+        "- 必要に応じて複数の分割点を選び、自然な会話のまとまりを優先してください。\n"
+        "- 応答は JSON オブジェクトのみ。形式: {\"boundaries\": [秒数の配列]}。\n"
+        "- 配列は昇順で、最終的な終了時刻は含めません。"
+    )
+
+    user_prompt = (
+        "動画全体を 3 分未満のパートに分けます。分割点はセグメントの境界のみを使用してください。\n"
+        f"動画尺: {total_duration:.1f} 秒。\n"
+        "以下の字幕セグメントを参考に、自然な切れ目になりそうな境界秒を選んでください。\n"
+        f"{segment_outline}"
+    )
+
+    log_response = prompt_logger(system_prompt, user_prompt)
+
+    try:
+        content = chat_completion(system_prompt=system_prompt, user_prompt=user_prompt, config=config, env_info=env_info)
+        log_response(content)
+    except Exception as exc:
+        log_response(exc)
+        reporter.log("LLM から分割案を取得できなかったため、等分ベースで分割します。")
+        return None
+
+    try:
+        payload = _extract_json_payload(content)
+        data = json.loads(payload)
+    except json.JSONDecodeError:
+        reporter.log("LLM 応答を JSON として解釈できなかったため、等分ベースで分割します。")
+        return None
+
+    boundaries_in = (
+        data.get("boundaries")
+        if isinstance(data, dict)
+        else None
+    )
+    if not isinstance(boundaries_in, list):
+        reporter.log("LLM 応答に boundaries 配列が見つからなかったため、等分ベースで分割します。")
+        return None
+
+    boundaries: list[float] = []
+    for item in boundaries_in:
+        try:
+            ts = float(item)
+        except (TypeError, ValueError):
+            continue
+        if 0 < ts < total_duration:
+            boundaries.append(ts)
+
+    return boundaries
+
+
+def _snap_boundaries_to_segments(
+    boundaries: Sequence[float], allowed: list[float], total_duration: float
+) -> list[float]:
+    snapped: list[float] = []
+    remaining = list(allowed)
+    last = 0.0
+
+    for raw in sorted(boundaries):
+        if raw <= 0 or raw >= total_duration:
+            continue
+        if not remaining:
+            break
+        nearest = min(remaining, key=lambda b: abs(b - raw))
+        if nearest <= last or nearest >= total_duration:
+            continue
+        snapped.append(nearest)
+        last = nearest
+        remaining = [b for b in remaining if b > nearest]
+
+    return snapped
+
+
+def _fill_long_gaps(boundaries: list[float], allowed: list[float], total_duration: float) -> list[float]:
+    completed: list[float] = []
+    remaining = list(allowed)
+    last = 0.0
+
+    for boundary in sorted(boundaries + [total_duration]):
+        while boundary - last > _VIDEO_PART_LIMIT and remaining:
+            upper = min(boundary, last + _VIDEO_PART_LIMIT)
+            candidates = [b for b in remaining if last < b <= upper]
+            if not candidates:
+                break
+            target = upper
+            next_boundary = min(candidates, key=lambda b: abs(b - target))
+            completed.append(next_boundary)
+            last = next_boundary
+            remaining = [b for b in remaining if b > next_boundary]
+
+        if 0 < boundary < total_duration and boundary > last:
+            completed.append(boundary)
+            last = boundary
+            remaining = [b for b in remaining if b > boundary]
+
+    return completed
+
+
+def _calc_even_boundaries(allowed: list[float], total_duration: float) -> list[float]:
+    boundaries: list[float] = []
+    remaining = list(allowed)
+    last = 0.0
+
+    while total_duration - last > _VIDEO_PART_LIMIT and remaining:
+        upper = min(total_duration, last + _VIDEO_PART_LIMIT)
+        candidates = [b for b in remaining if last < b <= upper]
+        if not candidates:
+            break
+        target = last + min(_VIDEO_PART_LIMIT, (total_duration - last) / math.ceil((total_duration - last) / _VIDEO_PART_LIMIT))
+        next_boundary = min(candidates, key=lambda b: abs(b - target))
+        boundaries.append(next_boundary)
+        last = next_boundary
+        remaining = [b for b in remaining if b > next_boundary]
+
+    return boundaries
+
+
+def _slice_segments_for_part(
+    segments: Sequence[style_convert.StylizedSegment], start: float, end: float
+) -> list[style_convert.StylizedSegment]:
+    sliced: list[style_convert.StylizedSegment] = []
+    for seg in segments:
+        if seg.end <= start or seg.start >= end:
+            continue
+        sliced.append(
+            style_convert.StylizedSegment(
+                start=max(0.0, seg.start - start),
+                end=max(0.0, seg.end - start),
+                text=seg.text,
+                speaker=seg.speaker,
+                character=seg.character,
+            )
+        )
+    return sliced
+
+
+def _slice_overlays_for_part(
+    overlays: Sequence[tuple[pathlib.Path, float, float]], start: float, end: float
+) -> list[tuple[pathlib.Path, float, float]]:
+    sliced: list[tuple[pathlib.Path, float, float]] = []
+    for path, ov_start, ov_end in overlays:
+        overlap_start = max(ov_start, start)
+        overlap_end = min(ov_end, end)
+        if overlap_end <= overlap_start:
+            continue
+        sliced.append((path, overlap_start - start, overlap_end - start))
+    return sliced
+
+
+def _plan_video_parts(
+    subtitle_segments: Sequence[style_convert.StylizedSegment],
+    *,
+    video_duration: float,
+    overlays: Sequence[tuple[pathlib.Path, float, float]],
+    config: PipelineConfig,
+    run_dir: pathlib.Path,
+    reporter: _ProgressReporter,
+    env_info: EnvironmentInfo,
+) -> list[VideoPartPlan]:
+    if not config.video_split:
+        if video_duration > _VIDEO_PART_LIMIT:
+            reporter.log("動画分割オプションが無効のため、1 本の動画として出力します。")
+        return [
+            VideoPartPlan(
+                index=1,
+                start=0.0,
+                end=video_duration,
+                subtitle_segments=_slice_segments_for_part(subtitle_segments, 0.0, video_duration),
+                overlays=_slice_overlays_for_part(overlays, 0.0, video_duration),
+            )
+        ]
+
+    if video_duration <= _VIDEO_PART_LIMIT:
+        return [
+            VideoPartPlan(
+                index=1,
+                start=0.0,
+                end=video_duration,
+                subtitle_segments=_slice_segments_for_part(subtitle_segments, 0.0, video_duration),
+                overlays=_slice_overlays_for_part(overlays, 0.0, video_duration),
+            )
+        ]
+
+    allowed_boundaries = _segment_boundaries(subtitle_segments, video_duration)
+    if not allowed_boundaries:
+        reporter.log("字幕の境界が取得できなかったため、分割せずに出力します。")
+        return [
+            VideoPartPlan(
+                index=1,
+                start=0.0,
+                end=video_duration,
+                subtitle_segments=_slice_segments_for_part(subtitle_segments, 0.0, video_duration),
+                overlays=_slice_overlays_for_part(overlays, 0.0, video_duration),
+            )
+        ]
+
+    desired_boundaries: list[float] | None = None
+    if config.llm_backend != "none":
+        desired_boundaries = _suggest_video_boundaries_with_llm(
+            subtitle_segments,
+            total_duration=video_duration,
+            config=config,
+            run_dir=run_dir,
+            reporter=reporter,
+            env_info=env_info,
+        )
+    else:
+        reporter.log("LLM が指定されていないため、等分ベースで動画を分割します。")
+
+    if desired_boundaries:
+        snapped = _snap_boundaries_to_segments(desired_boundaries, allowed_boundaries, video_duration)
+    else:
+        snapped = []
+
+    if not snapped:
+        snapped = _calc_even_boundaries(allowed_boundaries, video_duration)
+
+    finalized = _fill_long_gaps(snapped, allowed_boundaries, video_duration)
+    if not finalized and video_duration > _VIDEO_PART_LIMIT:
+        finalized = _calc_even_boundaries(allowed_boundaries, video_duration)
+
+    starts = [0.0] + finalized
+    ends = finalized + [video_duration]
+
+    parts: list[VideoPartPlan] = []
+    for idx, (start, end) in enumerate(zip(starts, ends), start=1):
+        parts.append(
+            VideoPartPlan(
+                index=idx,
+                start=start,
+                end=end,
+                subtitle_segments=_slice_segments_for_part(subtitle_segments, start, end),
+                overlays=_slice_overlays_for_part(overlays, start, end),
+            )
+        )
+
+    reporter.log(f"動画尺 {video_duration:.1f}s を {len(parts)} 本に分割して出力します。")
+    return parts
+
+
 def _step_finalize(state: PipelineState) -> None:
     """字幕生成、mp3 化、作業ディレクトリのクリーンアップなどを行う。"""
     if state.placements is None:
@@ -1093,11 +1376,14 @@ def _step_finalize(state: PipelineState) -> None:
     ass_path: pathlib.Path | None = None
     audio_for_video = temp_wav
     image_overlays: list[tuple[pathlib.Path, float, float]] = []
+    video_parts: list[VideoPartPlan] = []
+    video_duration = 0.0
 
     if need_video:
         if subtitle_segments_for_video is None:
             raise RuntimeError("動画生成に必要な字幕データを準備できませんでした。")
         reporter.log("動画用の字幕ファイルを生成しています...")
+        video_duration = audio.read_wav_duration(audio_for_video)
         ass_path = run_dir / f"{state.output_base_name}.ass"
         subtitles.write_ass_subtitles(
             subtitle_segments_for_video,
@@ -1112,7 +1398,6 @@ def _step_finalize(state: PipelineState) -> None:
         reporter.log(f"字幕ASSを生成しました -> {ass_path.name}")
 
         if config.video_images:
-            video_duration = audio.read_wav_duration(audio_for_video)
             image_overlays = video.build_image_overlays(
                 config.video_images,
                 video_duration=video_duration,
@@ -1120,48 +1405,100 @@ def _step_finalize(state: PipelineState) -> None:
                 env_info=env_info,
             )
 
+        video_parts = _plan_video_parts(
+            subtitle_segments_for_video,
+            video_duration=video_duration,
+            overlays=image_overlays,
+            config=config,
+            run_dir=run_dir,
+            reporter=reporter,
+            env_info=env_info,
+        )
+
     if need_video and ass_path is not None:
         if not audio_for_video.exists():
             raise FileNotFoundError(append_env_details("動画出力用の音声ファイルが見つかりません。", env_info))
-        if config.output_mp4:
-            target = out_dir / f"{state.output_base_name}.mp4"
-            reporter.log(f"mp4 を生成しています -> {target}")
-            step_start = reporter.now()
-            video.render_video_with_subtitles(
-                audio=audio_for_video,
-                subtitles=ass_path,
-                output=target,
-                ffmpeg_path=config.ffmpeg_path,
-                width=config.video_width,
-                height=config.video_height,
-                fps=config.video_fps,
-                transparent=False,
-                env_info=env_info,
-                overlays=image_overlays,
-                image_scale=config.video_image_scale,
-                image_position=config.video_image_position,
-            )
-            state.complete_step("mp4 生成が完了しました。", step_start)
 
-        if config.output_mov:
-            target = out_dir / f"{state.output_base_name}.mov"
-            reporter.log(f"mov を生成しています -> {target}")
-            step_start = reporter.now()
-            video.render_video_with_subtitles(
-                audio=audio_for_video,
-                subtitles=ass_path,
-                output=target,
-                ffmpeg_path=config.ffmpeg_path,
-                width=config.video_width,
-                height=config.video_height,
-                fps=config.video_fps,
-                transparent=True,
-                env_info=env_info,
+        if not video_parts:
+            video_parts = _plan_video_parts(
+                subtitle_segments_for_video or [],
+                video_duration=video_duration or audio.read_wav_duration(audio_for_video),
                 overlays=image_overlays,
-                image_scale=config.video_image_scale,
-                image_position=config.video_image_position,
+                config=config,
+                run_dir=run_dir,
+                reporter=reporter,
+                env_info=env_info,
             )
-            state.complete_step("mov 生成が完了しました。", step_start)
+
+        multi_part = len(video_parts) > 1
+
+        for part in video_parts:
+            part_base = state.output_base_name if not multi_part else f"{state.output_base_name}_part{part.index:02d}"
+            part_ass_path = ass_path
+            part_audio_path = audio_for_video
+            part_overlays = part.overlays
+
+            if multi_part:
+                part_ass_path = run_dir / f"{part_base}.ass"
+                subtitles.write_ass_subtitles(
+                    part.subtitle_segments,
+                    path=part_ass_path,
+                    characters={char1.id: char1, char2.id: char2},
+                    colors=colors,
+                    font=config.subtitle_font,
+                    font_size=config.subtitle_font_size,
+                    resolution=(config.video_width, config.video_height),
+                    max_chars_per_line=max_chars,
+                )
+                part_audio_path = run_dir / f"{part_base}.wav"
+                audio.slice_wav_segment(
+                    audio_for_video,
+                    part_audio_path,
+                    start=part.start,
+                    end=part.end,
+                    ffmpeg_path=config.ffmpeg_path,
+                    env_info=env_info,
+                )
+
+            if config.output_mp4:
+                target = out_dir / f"{part_base}.mp4"
+                reporter.log(f"mp4 を生成しています -> {target}")
+                step_start = reporter.now()
+                video.render_video_with_subtitles(
+                    audio=part_audio_path,
+                    subtitles=part_ass_path,
+                    output=target,
+                    ffmpeg_path=config.ffmpeg_path,
+                    width=config.video_width,
+                    height=config.video_height,
+                    fps=config.video_fps,
+                    transparent=False,
+                    env_info=env_info,
+                    overlays=part_overlays,
+                    image_scale=config.video_image_scale,
+                    image_position=config.video_image_position,
+                )
+                state.complete_step("mp4 生成が完了しました。", step_start)
+
+            if config.output_mov:
+                target = out_dir / f"{part_base}.mov"
+                reporter.log(f"mov を生成しています -> {target}")
+                step_start = reporter.now()
+                video.render_video_with_subtitles(
+                    audio=part_audio_path,
+                    subtitles=part_ass_path,
+                    output=target,
+                    ffmpeg_path=config.ffmpeg_path,
+                    width=config.video_width,
+                    height=config.video_height,
+                    fps=config.video_fps,
+                    transparent=True,
+                    env_info=env_info,
+                    overlays=part_overlays,
+                    image_scale=config.video_image_scale,
+                    image_position=config.video_image_position,
+                )
+                state.complete_step("mov 生成が完了しました。", step_start)
 
     if not config.keep_work:
         reporter.log("作業ディレクトリをクリーンアップしています...")
