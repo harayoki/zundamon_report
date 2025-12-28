@@ -1993,6 +1993,7 @@ def _insert_line_breaks(
 
     for idx, seg in enumerate(segments):
         new_text = response_map.get(idx, seg.text)
+        print(idx, new_text)
         lines = [line.strip() for line in new_text.splitlines() if line.strip()]
 
         if not lines:
@@ -2014,6 +2015,7 @@ def _insert_line_breaks(
 
         if len(lines) == 1 or not config.linebreak_split_segments:
             text = "\n".join(lines)
+            text = text.replace("\\n", "") # 行末に改行と別に\\nがいる事がある
             adjusted.append(
                 style_convert.StylizedSegment(
                     start=seg.start,
