@@ -272,6 +272,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="口調変換で LLM を使用しない (--llm でバックエンド指定)。省略時は LLM による口調変換を行います。",
     )
     parser.add_argument(
+        "--no-linebreak-with-llm",
+        action="store_false",
+        dest="linebreak_with_llm",
+        default=True,
+        help="長いセリフに自然な改行を入れる LLM 処理を無効化します。",
+    )
+    parser.add_argument(
+        "--linebreak-min-chars",
+        type=_positive_int,
+        default=40,
+        help="改行を検討する最小文字数の目安を指定します（デフォルト: 40）。",
+    )
+    parser.add_argument(
         "--resume-from",
         dest="resume_from",
         default=None,
@@ -353,6 +366,8 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
         output_mov=args.mov,
         review_transcript=review_mode,
         style_with_llm=args.style_with_llm,
+        linebreak_with_llm=args.linebreak_with_llm,
+        linebreak_min_chars=args.linebreak_min_chars,
         diarization_threshold=args.diarization_threshold,
         intro1=args.intro1,
         intro2=args.intro2,

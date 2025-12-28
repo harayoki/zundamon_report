@@ -887,6 +887,27 @@ def _step_stylize(state: PipelineState) -> None:
             reporter=reporter,
             run_dir=run_dir,
         )
+        linebreak_prompt_logger = None
+        linebreak_prompt_path = run_dir / "line_break_llm_prompts.log"
+        if config.linebreak_with_llm and config.llm_backend != "none":
+            linebreak_prompt_path.write_text("", encoding="utf-8")
+            reporter.log(f"改行調整用LLMプロンプトを {linebreak_prompt_path.name} に記録します。")
+
+            def _log_linebreak_prompt(system_prompt: str, user_prompt: str) -> None:
+                with linebreak_prompt_path.open("a", encoding="utf-8") as fp:
+                    fp.write("=== Line Break LLM Prompt ===\n")
+                    fp.write("[System]\n")
+                    fp.write(system_prompt.strip() + "\n\n")
+                    fp.write("[User]\n")
+                    fp.write(user_prompt.strip() + "\n\n")
+
+            linebreak_prompt_logger = _log_linebreak_prompt
+
+        stylized = _insert_line_breaks(
+            stylized,
+            config=config,
+            prompt_logger=linebreak_prompt_logger,
+        )
         _save_stylized(stylized, stylized_path)
         _log_style_diff(mapped, stylized, run_dir / "style_diff.log")
         reporter.log("口調変換が完了し保存しました。")
@@ -1400,3 +1421,54 @@ def _prepend_introductions(
         )
 
     return intro_segments + list(segments)
+
+
+def _insert_line_breaks(
+    segments: Sequence[style_convert.StylizedSegment],
+    *,
+    config: PipelineConfig,
+    prompt_logger: Callable[[str, str], None] | None = None,
+) -> list[style_convert.StylizedSegment]:
+    if not config.linebreak_with_llm or config.llm_backend == "none":
+        return list(segments)
+
+    adjusted: list[style_convert.StylizedSegment] = []
+
+    for seg in segments:
+        if len(seg.text) <= config.linebreak_min_chars:
+            adjusted.append(seg)
+            continue
+
+        system_prompt = (
+            "あなたは日本語のセリフを整形するアシスタントです。\n"
+            "以下の規則に従ってください:\n"
+            "- 語句や順序を一切変更せず、必要なら改行(\\n)を挿入するだけにしてください。\n"
+            "- 整形後のセリフのみを返し、説明や番号付け、余計な記号は入れないでください。\n"
+            "- 改行が不要なら元のセリフをそのまま返してください。\n"
+        )
+        user_prompt = (
+            f"次のセリフが{config.linebreak_min_chars}文字を超えて長い場合に、句読点や自然な区切りで改行を入れてください。\n"
+            "読みやすさが目的なので、言い回しや句読点は変えないでください。\n"
+            f"セリフ: {seg.text}"
+        )
+
+        if prompt_logger:
+            prompt_logger(system_prompt, user_prompt)
+
+        try:
+            content = chat_completion(system_prompt=system_prompt, user_prompt=user_prompt, config=config)
+            new_text = content.strip() or seg.text
+        except Exception:
+            new_text = seg.text
+
+        adjusted.append(
+            style_convert.StylizedSegment(
+                start=seg.start,
+                end=seg.end,
+                text=new_text,
+                speaker=seg.speaker,
+                character=seg.character,
+            )
+        )
+
+    return adjusted
