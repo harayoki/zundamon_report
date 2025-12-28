@@ -157,6 +157,12 @@ def _estimate_total_duration(segments: Sequence[style_convert.StylizedSegment]) 
     return sum(max(0.0, seg.end - seg.start) for seg in segments)
 
 
+def _resolve_temp_output_wav(run_dir: pathlib.Path) -> pathlib.Path:
+    """作業ディレクトリに保持する一時的な出力 WAV のパスを返す。"""
+
+    return run_dir / "output.wav"
+
+
 def _build_target_durations(
     segments: Sequence[style_convert.StylizedSegment],
     *,
@@ -942,7 +948,7 @@ def _step_concatenate(state: PipelineState) -> None:
 
     reporter.log("セグメントをタイムラインに配置しています...")
     step_start = reporter.now()
-    temp_wav = run_dir / f"{state.output_base_name}.wav"
+    temp_wav = _resolve_temp_output_wav(run_dir)
     placements = audio.join_wavs(
         state.synthesized_paths,
         temp_wav,
@@ -1000,7 +1006,7 @@ def _step_finalize(state: PipelineState) -> None:
 
     output_wav = out_dir / f"{state.output_base_name}.wav"
     output_mp3 = out_dir / f"{state.output_base_name}.mp3"
-    temp_wav = run_dir / f"{state.output_base_name}.wav"
+    temp_wav = _resolve_temp_output_wav(run_dir)
 
     need_wav_output = not config.want_mp3 and not need_video
 
