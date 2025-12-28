@@ -155,6 +155,16 @@ python -m reportvox input.wav --speakers 2 --speaker1 zundamon --speaker2 metan
 # 中断したワークフローを再開（work/<run_id> を指定）
 python -m reportvox input.wav --resume 20240101-120000
 
+# mp3 を作ったあとに mp4 だけを生成（work/<run_id> を指定）
+python -m reportvox.video_cli --run-id 20240101-120000
+
+# 作業ディレクトリを指定せず、必要なファイルを個別指定して mp4 を生成
+python -m reportvox.video_cli \
+  --stylized work/20240101-120000/stylized.json \
+  --placements work/20240101-120000/placements.json \
+  --segments-dir work/20240101-120000 \
+  --audio out/input_report.mp3
+
 # work/<run_id> を残して設定変更や再出力に使う（開発用）
 python -m reportvox input.wav --keep-work
 
