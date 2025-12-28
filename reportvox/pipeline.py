@@ -184,11 +184,13 @@ def _collect_existing_outputs(
     want_mov: bool,
 ) -> list[pathlib.Path]:
     existing: list[pathlib.Path] = []
+    want_wav_output = not want_mp3 and not (want_mp4 or want_mov)
+
     if want_mp3:
         mp3_path = out_dir / f"{base_name}.mp3"
         if mp3_path.exists():
             existing.append(mp3_path)
-    else:
+    elif want_wav_output:
         wav_path = out_dir / f"{base_name}.wav"
         if wav_path.exists():
             existing.append(wav_path)
@@ -940,8 +942,7 @@ def _step_concatenate(state: PipelineState) -> None:
 
     reporter.log("セグメントをタイムラインに配置しています...")
     step_start = reporter.now()
-    output_wav = out_dir / f"{state.output_base_name}.wav"
-    temp_wav = run_dir / f"{state.output_base_name}.wav" if config.want_mp3 else output_wav
+    temp_wav = run_dir / f"{state.output_base_name}.wav"
     placements = audio.join_wavs(
         state.synthesized_paths,
         temp_wav,
@@ -999,9 +1000,9 @@ def _step_finalize(state: PipelineState) -> None:
 
     output_wav = out_dir / f"{state.output_base_name}.wav"
     output_mp3 = out_dir / f"{state.output_base_name}.mp3"
-    temp_wav = run_dir / f"{state.output_base_name}.wav" if config.want_mp3 else output_wav
+    temp_wav = run_dir / f"{state.output_base_name}.wav"
 
-    need_wav_output = not config.want_mp3 or need_video
+    need_wav_output = not config.want_mp3 and not need_video
 
     if config.want_mp3:
         reporter.log(f"mp3 を生成しています -> {output_mp3}")
@@ -1014,16 +1015,14 @@ def _step_finalize(state: PipelineState) -> None:
             env_info=env_info,
         )
         state.complete_step("mp3 生成が完了しました。", step_start)
-        if need_wav_output and not output_wav.exists():
-            temp_wav.replace(output_wav)
-        elif temp_wav.exists():
-            temp_wav.unlink()
+        if need_wav_output:
+            shutil.copy2(temp_wav, output_wav)
     else:
-        if not output_wav.exists():
-            temp_wav.replace(output_wav)
+        if need_wav_output:
+            shutil.copy2(temp_wav, output_wav)
 
     ass_path: pathlib.Path | None = None
-    audio_for_video = output_wav if output_wav.exists() else temp_wav
+    audio_for_video = temp_wav
     image_overlays: list[tuple[pathlib.Path, float, float]] = []
 
     if need_video:
