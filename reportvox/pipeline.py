@@ -1414,11 +1414,11 @@ def _prepend_introductions(
         return list(segments)
 
     intro_segments: list[style_convert.StylizedSegment] = []
-    zunda_intro_segment: style_convert.StylizedSegment | None = None
+    zunda_intro_segments: list[style_convert.StylizedSegment] = []
 
     def resolve_zunda_intro_text() -> str | None:
         def build_intro(senior_job: str, junior_job: str) -> str:
-            return f"僕の名前はずんだもん、{senior_job}にあこがれる{junior_job}なのだ"
+            return f"{senior_job}にあこがれる{junior_job}なのだ"
 
         if config.zunda_senior_job and config.zunda_junior_job:
             return build_intro(config.zunda_senior_job, config.zunda_junior_job)
@@ -1460,6 +1460,15 @@ def _prepend_introductions(
         if not speaker_map:
             speaker_map[char1.id] = segments[0].speaker
 
+    def create_intro_segment(text: str, speaker: str, character: str) -> style_convert.StylizedSegment:
+        return style_convert.StylizedSegment(
+            start=0.0,
+            end=0.0,
+            text=text,
+            speaker=speaker,
+            character=character,
+        )
+
     # 話者1の挨拶を処理
     intro1_text = config.intro1
     # --intro1 がなく、かつ条件を満たす場合にずんだもんの職業挨拶を生成
@@ -1467,29 +1476,28 @@ def _prepend_introductions(
         intro1_text = resolve_zunda_intro_text()
 
     if intro1_text and char1.id in speaker_map:
-        target_segment = style_convert.StylizedSegment(
-            start=0.0,
-            end=0.0,
-            text=intro1_text,
-            speaker=speaker_map[char1.id],
-            character=char1.id,
-        )
         if char1.id == "zundamon" and config.intro1 is None:
-            zunda_intro_segment = target_segment
+            zunda_intro_segments.extend(
+                [
+                    create_intro_segment("僕の名前はずんだもん", speaker_map[char1.id], char1.id),
+                    create_intro_segment(intro1_text, speaker_map[char1.id], char1.id),
+                ]
+            )
         else:
-            intro_segments.append(target_segment)
+            intro_segments.append(
+                create_intro_segment(intro1_text, speaker_map[char1.id], char1.id)
+            )
 
     # 話者2がずんだもんの場合、職業挨拶を生成して最優先で挿入する
     zunda_intro_text: str | None = None
     if char2.id == "zundamon" and config.intro2 is None:
         zunda_intro_text = resolve_zunda_intro_text()
-    if zunda_intro_segment is None and zunda_intro_text and char2.id in speaker_map:
-        zunda_intro_segment = style_convert.StylizedSegment(
-            start=0.0,
-            end=0.0,
-            text=zunda_intro_text,
-            speaker=speaker_map[char2.id],
-            character=char2.id,
+    if not zunda_intro_segments and zunda_intro_text and char2.id in speaker_map:
+        zunda_intro_segments.extend(
+            [
+                create_intro_segment("僕の名前はずんだもん", speaker_map[char2.id], char2.id),
+                create_intro_segment(zunda_intro_text, speaker_map[char2.id], char2.id),
+            ]
         )
 
     # 話者2の挨拶を処理
@@ -1505,8 +1513,8 @@ def _prepend_introductions(
         )
 
     ordered_segments: list[style_convert.StylizedSegment] = []
-    if zunda_intro_segment is not None:
-        ordered_segments.append(zunda_intro_segment)
+    if zunda_intro_segments:
+        ordered_segments.extend(zunda_intro_segments)
 
     ordered_segments.extend(intro_segments)
     ordered_segments.extend(segments)

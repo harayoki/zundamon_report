@@ -85,6 +85,15 @@ def _kana_instruction(level: str) -> str:
     )
 
 
+def _character_specific_rules(meta: CharacterMeta) -> str:
+    if meta.id == "zundamon":
+        return (
+            "- 挨拶ではなく、何か考えた結果の意見を述べる文の直前に1回だけ「かしこいぼくはかんがえました。」を挿入してください。\n"
+            "- 必要な箇所のみで1回だけ使い、同じセグメント内で繰り返さないでください。\n"
+        )
+    return ""
+
+
 def _llm_transform_batch(
     texts: Sequence[str],
     meta: CharacterMeta,
@@ -112,6 +121,7 @@ def _llm_transform_batch(
         "- 元の文章の意味、固有名詞、専門用語を絶対に変えないでください。\n"
         "- 英語に翻訳しないでください。\n"
     )
+    system_prompt += _character_specific_rules(meta)
     system_prompt += kana_rule
 
     user_prompt = (
@@ -169,6 +179,7 @@ def _llm_transform(
         "- 元の文章の意味、固有名詞、専門用語を絶対に変えないでください。\n"
         "- 英語に翻訳しないでください。\n"
     )
+    system_prompt += _character_specific_rules(meta)
     system_prompt += kana_rule
     user_prompt = (
         f"キャラクター「{meta.display_name or meta.id}」の話し方を参考に、以下の文章を自然な話し言葉に変換してください。\n"
