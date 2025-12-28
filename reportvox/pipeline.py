@@ -378,6 +378,40 @@ def _load_stylized(path: pathlib.Path) -> list[style_convert.StylizedSegment]:
     return segments
 
 
+def _save_placements(placements: Sequence[tuple[float, float]], path: pathlib.Path) -> None:
+    data = [{"start": start, "end": end} for start, end in placements]
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _load_placements(path: pathlib.Path) -> list[tuple[float, float]]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return [(float(item.get("start", 0.0)), float(item.get("end", 0.0))) for item in data]
+
+
+def _write_run_metadata(state: "PipelineState") -> None:
+    metadata = {
+        "run_id": state.run_id,
+        "output_base_name": state.output_base_name,
+        "speaker1": state.config.speaker1,
+        "speaker2": state.config.speaker2,
+        "color1": state.config.color1,
+        "color2": state.config.color2,
+        "subtitle_max_chars": state.config.subtitle_max_chars,
+        "subtitle_font": state.config.subtitle_font,
+        "subtitle_font_size": state.config.subtitle_font_size,
+        "video_width": state.config.video_width,
+        "video_height": state.config.video_height,
+        "video_fps": state.config.video_fps,
+        "video_images": [str(p) for p in state.config.video_images],
+        "video_image_scale": state.config.video_image_scale,
+        "video_image_position": state.config.video_image_position,
+        "video_image_times": state.config.video_image_times,
+        "ffmpeg_path": state.config.ffmpeg_path,
+    }
+    path = state.run_dir / "metadata.json"
+    path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def _format_segments_for_diff(
     segments: Sequence[diarize.AlignedSegment | style_convert.StylizedSegment],
 ) -> list[str]:
@@ -532,7 +566,7 @@ class PipelineState:
     diarization_result: Optional[list[diarize.DiarizedSegment]] = None
     stylized_segments: Optional[list[style_convert.StylizedSegment]] = None
     synthesized_paths: Optional[list[pathlib.Path]] = None
-    placements: Optional[list[dict]] = None
+    placements: Optional[list[tuple[float, float]]] = None
     character_colors: Optional[Dict[str, str]] = None
 
     def complete_step(self, message: str, start_time: float) -> None:
@@ -588,6 +622,8 @@ def _step_prepare_input(state: PipelineState) -> None:
 
     output_base = _resolve_output_stem(config, input_path)
     state.output_base_name = output_base
+
+    _write_run_metadata(state)
 
     existing_outputs = _collect_existing_outputs(
         out_dir,
@@ -878,8 +914,16 @@ def _step_synthesize(state: PipelineState) -> None:
 
 def _step_concatenate(state: PipelineState) -> None:
     """合成された WAV をタイムラインに配置して結合する。"""
+    placements_path = state.run_dir / "placements.json"
+
     if state.placements:
         return
+
+    if state.config.resume_run_id is not None and placements_path.exists():
+        state.reporter.log("既存の配置情報を読み込みます...")
+        state.placements = _load_placements(placements_path)
+        return
+
     if state.synthesized_paths is None:
         state.reporter.log("合成済み音声が見つからないため、音声合成ステップから実行します。")
         _step_synthesize(state)
@@ -904,6 +948,7 @@ def _step_concatenate(state: PipelineState) -> None:
         target_durations=target_durations,
         env_info=env_info,
     )
+    _save_placements(placements, placements_path)
     state.complete_step("音声の結合が完了しました。", step_start)
     state.placements = placements
 
