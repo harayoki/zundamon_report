@@ -285,6 +285,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="改行を検討する最小文字数の目安を指定します（デフォルト: 40）。",
     )
     parser.add_argument(
+        "--kana-level",
+        choices=["none", "elementary", "junior", "high", "college"],
+        default="high",
+        help=(
+            "指定した学習レベルを超える難しい漢字をひらがな/カタカナに置き換えるよう LLM に指示します。"
+            "none=変換なし / elementary=小学生 / junior=中学生 / high=高校生（デフォルト） / college=大学生"
+        ),
+    )
+    parser.add_argument(
         "--resume-from",
         dest="resume_from",
         default=None,
@@ -368,6 +377,7 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
         style_with_llm=args.style_with_llm,
         linebreak_with_llm=args.linebreak_with_llm,
         linebreak_min_chars=args.linebreak_min_chars,
+        kana_level=args.kana_level,
         diarization_threshold=args.diarization_threshold,
         intro1=args.intro1,
         intro2=args.intro2,

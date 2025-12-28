@@ -11,6 +11,7 @@ SpeakerMode = Literal["auto", "1", "2"]
 SubtitleMode = Literal["off", "all", "split"]
 TranscriptReviewMode = Literal["off", "manual", "llm"]
 LLMBackend = Literal["none", "openai", "ollama"]
+KanaTargetLevel = Literal["none", "elementary", "junior", "high", "college"]
 
 
 @dataclass
@@ -53,6 +54,7 @@ class PipelineConfig:
     style_with_llm: bool = True
     linebreak_with_llm: bool = True
     linebreak_min_chars: int = 40
+    kana_level: KanaTargetLevel = "high"
     diarization_threshold: float = 0.8
     prepend_intro: bool = True
     intro1: Optional[str] = None
