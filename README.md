@@ -192,51 +192,47 @@ python -m reportvox input.mp4 --speakers auto --mp3
 ```
 
 ## 主なオプション
-- --voicevox-url: VOICEVOX Engine のベース URL。
-- --speakers {auto,1,2}: 話者数の扱い。
-- --diarization-threshold: 話者分離のクラスタリング閾値（0.0-1.0）。値が低いほど、声質が似ている話者も別人として分離されやすくなります。デフォルトは 0.8。
-- --speaker1: 主話者に割り当てるキャラクターID。
-- --speaker2: 副話者に割り当てるキャラクターID。
-- --color1 / --color2: 話者ごとに使うカラーコード（#RRGGBB、未指定時はキャラクターのメインカラー）。
-- --intro1: 話者1の最初の挨拶文を指定します。
-- --intro2: 話者2の最初の挨拶文を指定します。
-- --no-intro: 最初の挨拶文の自動挿入を無効化します。
-- --zunda-senior-job, --zunda-junior-job: speaker1がずんだもんの場合のデフォルト挨拶を生成します（--intro1が指定されている場合はこちらが優先されます）。どちらも省略した場合は、LLM がレポート内容に沿った「憧れの職業」と「現実のしょぼい職業」を自動で考えます（`--llm` でバックエンドを指定してください）。
-- --model: Whisper のモデルサイズ。
-- --speed-scale: VOICEVOX での読み上げ速度（デフォルト 1.1）。発話の間隔は維持されるため、音声全体の長さはほぼ変わりません。
-- --max-pause: セリフ間の無音をこの秒数までに詰めて結合します（デフォルト 0.2 秒）。負の値で詰めずにそのまま。
-- --llm {none,openai,ollama}: LLMバックエンドの指定。
-- --no-style-with-llm: 口調変換で LLM を使用しない (--llm でバックエンド指定、デフォルトは使用)。`characters/<id>/meta.yaml` の `phrases.default` に設定した口癖は、LLM バックエンドが有効な場合にのみ反映されます。
-- --ollama-host: Ollamaのホスト名。
-- --ollama-port: Ollamaのポート番号。
-- --ollama-model: Ollamaで使用するモデル名。デフォルトは環境変数 LOCAL_LLM_MODEL または 'llama3'。
-- --mp3: mp3 を生成（out/ には mp3 だけを出力）。
-- --bitrate: mp3 出力時のビットレート。
-- --output-name: 出力ファイル名のベース（拡張子不要）。mp3/字幕にも同名を適用。
-- --ffmpeg-path: ffmpeg 実行ファイルへのパス。
-- -f, --force: 出力の上書き確認をスキップ。
-- --force-transcribe: 文字起こしキャッシュを無視して Whisper による文字起こしをやり直します。
-- --resume <run_id>: 中断した工程から再開。
-- --resume-from: --resume と併用し、指定したステップから再開。
-- --keep-work: work/<run_id> を削除せず保持（開発/再出力向け）。
-- --review-transcript: 文字起こし結果を保存したあとで処理を停止し、transcript.json を手動修正したうえで表示される再開コマンドを実行して続行できるようにする。
-- --review-transcript-llm: 文字起こし結果を保存したあと、LLM で明らかな誤字脱字を自動校正してから続行する（--llm でバックエンド指定）。
-- --skip-review-transcript: 誤字脱字の自動校正を行わずに次の工程へ進みます。
-- --mp4: 字幕入りの mp4 を生成。
-- --mov: 字幕入り・透明背景の mov (ProRes 4444) を生成。
+- **音声入力と話者設定**
+  - `--voicevox-url`: VOICEVOX Engine のベースURL（デフォルト: `http://127.0.0.1:50021`）。
+  - `--speakers {auto,1,2}`: 話者数の扱い（auto=自動判定/1=単一話者/2=2人固定）。
+  - `--diarization-threshold`: 話者分離のクラスタリング閾値（0.0-1.0、デフォルト 0.8）。
+  - `--speaker1` / `--speaker2`: 話者に割り当てるキャラクターID（デフォルト: ずんだもん/めたん）。
+  - `--color1` / `--color2`: 各話者で使用するカラーコード（`#RRGGBB`）。
+  - `--intro1` / `--intro2`: 最初の挨拶文の上書き、`--no-intro` で挨拶自動挿入をオフ。
+  - `--zunda-senior-job` / `--zunda-junior-job`: ずんだもんの役割設定（未指定時は自動決定）。
 
-## 動画書き出し制御オプション
-- --video-width / --video-height: 動画の解像度をピクセルで指定（デフォルト 1080x1920）。
-- --video-fps: 動画のフレームレート。デフォルト 24 fps。
-- --video-images: 動画上に順番に表示する画像ファイルのパスを指定（複数指定可）。
-- --video-image-times: 各画像の表示開始秒を指定（--video-images と同数）。未指定時は尺を等分。
-- --video-image-pos: 画像の表示位置（"X,Y"）。
-- --video-image-scale: 動画に重ねる画像の拡大率（デフォルト 0.45）。
-- --subtitles {off,all,split}: SRT 字幕の出力モード（デフォルト all、2話者を1つにまとめて出力。split で話者別ファイルも生成）。
-- --subtitle-max-chars: 字幕1枚あたりの最大文字数（デフォルト 25、0 で無制限）。
-- --subtitle-font: 動画用ASS字幕に使用するフォント名（libass で解決可能なもの）。
-- --subtitle-font-size: 動画用ASS字幕のフォントサイズ。デフォルトは 96 pt。
+- **出力形式とファイル操作**
+  - `--mp3` / `--bitrate`: mp3 を生成し、ビットレートを指定（デフォルト `192k`）。
+  - `--mp4` / `--mov`: 字幕付きの mp4 / 透明 mov を生成。
+  - `--output-name`: 出力ファイル名のベースを指定（拡張子不要）。
+  - `-f, --force`: 既存の出力を確認なしで上書き。
+  - `--ffmpeg-path`: ffmpeg 実行ファイルのパス。
+  - `--keep-work`: `work/` 以下の中間ファイルを残す。
+  - `--max-pause`: セリフ間の無音を詰める秒数（負の値で詰めない）。
 
+- **音声認識と LLM 設定**
+  - `--model`: Whisper モデルサイズ（デフォルト `large-v3`）。
+  - `--llm {none,openai,ollama}`: 口調変換に使う LLM バックエンド。
+  - `--ollama-host` / `--ollama-port` / `--ollama-model`: ローカルLLM接続先とモデル指定。
+  - `--no-style-with-llm`: 口調変換を LLM で行わない。
+  - `--no-linebreak-with-llm`: 長いセリフへの改行挿入を無効化、`--linebreak-min-chars` で改行検討の長さを調整。
+  - `--kana-level`: 漢字のふりがなレベル（none/elementary/junior/high/college）。
+
+- **文字起こしのレビュー**
+  - `--review-transcript`: 文字起こし保存後に処理を停止し手動修正。
+  - `--review-transcript-llm`: 文字起こし後に LLM で誤字脱字を校正して続行。
+  - `--skip-review-transcript`: 自動校正をスキップ。
+
+- **字幕・動画出力**
+  - `--subtitles {off,all,split}`: SRT の出力形式（生成なし/全発話/話者別）。
+  - `--subtitle-max-chars` / `--subtitle-font` / `--subtitle-font-size`: 字幕の1行文字数・フォント・サイズ設定。
+  - `--video-width` / `--video-height` / `--video-fps`: 動画の解像度とフレームレート。
+  - `--video-images` / `--video-image-times` / `--video-image-pos` / `--video-image-scale`: 動画上に配置する画像、開始時刻・位置・拡大率。
+
+- **再実行・キャッシュ**
+  - `--resume`: 既存の `work/<run_id>` を指定して処理を再開。
+  - `--resume-from`: 再開時に特定ステップから実行。
+  - `--force-transcribe` / `--force-diarize`: 文字起こし・話者分離のキャッシュを無視して再実行。
 ## カスタム話者・口癖の追加
 新しいキャラクターの追加や口癖の調整方法は「[キャラクター追加・口癖設定ガイド](docs/characters.md)」にまとめています。
 
