@@ -200,12 +200,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--keep-work", action="store_true", help="work/ 以下の中間ファイルを削除せず残す（開発/再出力向け）。")
     parser.add_argument("--model", default="large-v3", choices=['tiny', 'base', 'small', 'medium', 'large', 'large-v1', 'large-v2', 'large-v3'], help="利用する Whisper モデルサイズ（tiny/base/small/medium/large-v3）。")
-    parser.add_argument("--speed-scale", type=_positive_float, default=1.1, help="VOICEVOX の speedScale を指定（デフォルト 1.1）。")
+    parser.add_argument("--speed-scale", type=_positive_float, default=1.4, help="VOICEVOX の speedScale を指定（デフォルト 1.1）。")
     parser.add_argument(
         "--max-pause",
         type=_float,
-        default=0.1,
-        help="セリフ間の無音をこの秒数までに詰めて結合します（デフォルト 0.1）。負の値で詰めずにそのまま。",
+        default=0.05,
+        help="セリフ間の無音をこの秒数までに詰めて結合します（デフォルト 0.05）。負の値で詰めずにそのまま。",
     )
     parser.add_argument(
         "--resume",
@@ -295,8 +295,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--linebreak-min-chars",
         type=_positive_int,
-        default=16,
-        help="改行を検討する最小文字数の目安を指定します（デフォルト: 16）。",
+        default=19,
+        help="改行を検討する最小文字数の目安を指定します（デフォルト: 19）。",
     )
     parser.add_argument(
         "--kana-level",

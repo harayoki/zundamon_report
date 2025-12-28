@@ -331,8 +331,8 @@ def write_ass_subtitles(
     )
 
     primary_default = colors.get("default", "#ffffff")
-    outline_color = _ass_color_from_hex("#000000", alpha=0x64)
-    shadow_color = _ass_color_from_hex("#000000", alpha=0x96)
+    outline_color = _ass_color_from_hex("#111111", alpha=0x00)  # alphaは低い値ほど濃い
+    shadow_color = _ass_color_from_hex("#000000", alpha=0x80)
 
     script_info = [
         "[Script Info]",
@@ -345,19 +345,29 @@ def write_ass_subtitles(
 
     styles = [
         "[V4+ Styles]",
-        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
+        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, "
+        "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, "
+        "ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, "
+        "MarginR, MarginV, Encoding",
     ]
+
+    outline_size = 6
+    bold = 1
 
     default_style = _ass_color_from_hex(primary_default)
     styles.append(
-        f"Style: default,{font_name},{font_size},{default_style},&H00FFFFFF,{outline_color},{shadow_color},0,0,0,0,100,100,0,0,1,5,0,2,20,20,40,1"
+        f"Style: default,{font_name},{font_size},{default_style},&H00FFFFFF,"
+        f"{outline_color},{shadow_color},{bold},0,0,0,100,100,0,0,1,{outline_size}"
+        f",0,2,20,20,40,1"
     )
 
     for char_id, meta in characters.items():
         primary = _ass_color_from_hex(colors.get(char_id, primary_default))
         style_name = meta.id or char_id or "default"
         styles.append(
-            f"Style: {style_name},{font_name},{font_size},{primary},&H00FFFFFF,{outline_color},{shadow_color},0,0,0,0,100,100,0,0,1,5,0,2,20,20,40,1"
+            f"Style: {style_name},{font_name},{font_size},{primary},&H00FFFFFF,"
+            f"{outline_color},{shadow_color},{bold},0,0,0,100,100,0,0,1,{outline_size}"
+            f",0,2,20,20,40,1"
         )
 
     events = [
