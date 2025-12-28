@@ -1703,6 +1703,7 @@ def _decide_zunda_jobs(
             user_prompt=user_prompt,
             config=config,
             env_info=env_info,
+            temperature=0.2,
         )
         if log_response:
             log_response(content)
