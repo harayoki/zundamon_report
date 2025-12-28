@@ -202,7 +202,10 @@ def _build_target_durations(
         segment_length = max(0.0, seg.end - seg.start)
         expected_length = segment_length * speed_factor
         silence_to_next = max(0.0, gap_to_next - expected_length)
-        clamped_gap = expected_length + min(silence_to_next, max_pause)
+        if max_pause < 0:
+            clamped_gap = expected_length + silence_to_next
+        else:
+            clamped_gap = expected_length + min(silence_to_next, max_pause)
         base = max(clamped_gap, expected_length, 0.05)
         durations.append(base)
     return durations
