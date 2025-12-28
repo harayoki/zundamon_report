@@ -86,6 +86,7 @@ def _extract_json_payload(text: str) -> str:
     """
 
     trimmed = text.strip()
+    print(trimmed)
 
     fence_match = re.fullmatch(r"```(?:json)?\n(.*?)\n```", trimmed, flags=re.DOTALL)
     if fence_match:
@@ -94,9 +95,12 @@ def _extract_json_payload(text: str) -> str:
     if trimmed.startswith("{") and trimmed.endswith("}"):
         return trimmed
 
-    brace_match = re.search(r"\{.*\}", trimmed, flags=re.DOTALL)
-    if brace_match:
-        return brace_match.group(0)
+    if trimmed.startswith("[") and trimmed.endswith("]"):
+        return trimmed
+
+    # brace_match = re.search(r"\{.*\}", trimmed, flags=re.DOTALL)
+    # if brace_match:
+    #     return brace_match.group(0)
 
     return trimmed
 
