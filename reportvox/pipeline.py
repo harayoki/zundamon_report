@@ -475,6 +475,76 @@ def _write_run_metadata(state: "PipelineState") -> None:
     path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _write_video_plan_log(
+    *,
+    path: pathlib.Path,
+    video_duration: float,
+    video_parts: Sequence[VideoPartPlan],
+    image_overlays: Sequence[tuple[pathlib.Path, float, float]],
+    config: PipelineConfig,
+    output_base_name: str,
+    out_dir: pathlib.Path,
+) -> None:
+    overlays = [
+        {"image": str(p), "start": start, "end": end, "duration": end - start}
+        for p, start, end in image_overlays
+    ]
+
+    parts: list[dict] = []
+    for part in video_parts:
+        part_base = output_base_name if len(video_parts) == 1 else f"{output_base_name}_part{part.index:02d}"
+        outputs: dict[str, str] = {}
+        if config.output_mp4:
+            outputs["mp4"] = str(out_dir / f"{part_base}.mp4")
+        if config.output_mov:
+            outputs["mov"] = str(out_dir / f"{part_base}.mov")
+
+        layouts = video.compute_overlay_layouts(
+            part.overlays,
+            video_width=config.video_width,
+            video_height=config.video_height,
+            image_scale=config.video_image_scale,
+            image_position=config.video_image_position,
+        )
+
+        parts.append(
+            {
+                "index": part.index,
+                "start": part.start,
+                "end": part.end,
+                "duration": part.end - part.start,
+                "outputs": outputs,
+                "overlays": [
+                    {
+                        "image": str(layout.path),
+                        "start": layout.start,
+                        "end": layout.end,
+                        "absolute_start": part.start + layout.start,
+                        "absolute_end": part.start + layout.end,
+                        "position": {"x": layout.x, "y": layout.y},
+                        "size": {"width": layout.width, "height": layout.height},
+                        "scale": layout.scale,
+                    }
+                    for layout in layouts
+                ],
+            }
+        )
+
+    log = {
+        "video_duration": video_duration,
+        "resolution": {"width": config.video_width, "height": config.video_height, "fps": config.video_fps},
+        "video_split_enabled": config.video_split,
+        "image_settings": {
+            "scale": config.video_image_scale,
+            "position": config.video_image_position,
+        },
+        "overlays": overlays,
+        "parts": parts,
+    }
+
+    path.write_text(json.dumps(log, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def _format_segments_for_diff(
     segments: Sequence[diarize.AlignedSegment | style_convert.StylizedSegment],
 ) -> list[str]:
@@ -1490,6 +1560,18 @@ def _step_finalize(state: PipelineState) -> None:
             )
 
         multi_part = len(video_parts) > 1
+
+        video_plan_path = run_dir / "video_plan.json"
+        _write_video_plan_log(
+            path=video_plan_path,
+            video_duration=video_duration or audio.read_wav_duration(audio_for_video),
+            video_parts=video_parts,
+            image_overlays=image_overlays,
+            config=config,
+            output_base_name=state.output_base_name or state.run_id,
+            out_dir=out_dir,
+        )
+        reporter.log(f"動画生成ログを保存しました -> {video_plan_path.name}")
 
         for part in video_parts:
             part_base = state.output_base_name if not multi_part else f"{state.output_base_name}_part{part.index:02d}"
