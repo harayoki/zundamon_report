@@ -5,7 +5,7 @@ voicevox:
   speaker_id: 8
 style:
   first_person: あーし
-  endings: ["だよ", "かな", "かも"]
+  endings: []
   role: 元気なガイド役
 phrases:
   idea_intro: ["春日部つむぎです。はりきって説明するね！"]

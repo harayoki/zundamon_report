@@ -5,7 +5,7 @@ voicevox:
   speaker_id: 3
 style:
   first_person: ぼく
-  endings: ["のだ"]
+  endings: []
   role: 解説役
 phrases:
   idea_intro: ["ここでぼくの出番なのだ"]
