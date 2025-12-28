@@ -81,6 +81,13 @@ def _positive_float(value: str) -> float:
     return number
 
 
+def _float(value: str) -> float:
+    try:
+        return float(value)
+    except ValueError as exc:  # pragma: no cover - argparse handles messaging
+        raise argparse.ArgumentTypeError(f"数値を指定してください: {value}") from exc
+
+
 def _positive_int(value: str) -> int:
     try:
         number = int(value)
@@ -196,9 +203,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--speed-scale", type=_positive_float, default=1.1, help="VOICEVOX の speedScale を指定（デフォルト 1.1）。")
     parser.add_argument(
         "--max-pause",
-        type=_non_negative_float,
+        type=_float,
         default=0.1,
-        help="セリフ間の無音をこの秒数までに詰めて結合します（デフォルト 0.1）。0 で詰めない。",
+        help="セリフ間の無音をこの秒数までに詰めて結合します（デフォルト 0.1）。負の値で詰めずにそのまま。",
     )
     parser.add_argument(
         "--resume",
