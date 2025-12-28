@@ -1368,16 +1368,16 @@ def _decide_zunda_jobs(
         if preview:
             preview = preview[:200].replace("\n", " ")
             reporter.log(f"LLM 応答の先頭部分: {preview}")
-        return None
+        raise RuntimeError("LLM 応答を解析できませんでした") from exc
     except Exception as exc:
         if log_response:
             log_response(exc)
         reporter.log(f"ずんだもんの職業生成に失敗したため、省略します: {exc}")
-        return None
+        raise
 
     if not candidates:
         reporter.log("LLM 応答に必要な職業情報が含まれていなかったため、省略します。")
-        return None
+        raise RuntimeError("LLM 応答に職業情報が含まれていません")
 
     selected_senior, selected_junior = random.choice(candidates)
     config.zunda_senior_job = selected_senior
@@ -1412,9 +1412,20 @@ def _prepend_introductions(
     zunda_intro_segment: style_convert.StylizedSegment | None = None
 
     def resolve_zunda_intro_text() -> str | None:
+        def build_intro(senior_job: str, junior_job: str) -> str:
+            return f"僕の名前はずんだもん、{senior_job}にあこがれる{junior_job}なのだ"
+
         if config.zunda_senior_job and config.zunda_junior_job:
-            return f"僕の名前はずんだもん、{config.zunda_senior_job}にあこがれる{config.zunda_junior_job}なのだ"
-        if config.zunda_senior_job is None and config.zunda_junior_job is None and reporter is not None:
+            return build_intro(config.zunda_senior_job, config.zunda_junior_job)
+
+        senior_job = config.zunda_senior_job
+        junior_job = config.zunda_junior_job
+
+        if reporter is not None and (senior_job is None or junior_job is None):
+            if config.llm_backend == "none":
+                reporter.log("職業が未指定ですが LLM が無効のため、職業トークを省略します。")
+                return None
+
             decided = _decide_zunda_jobs(
                 transcript_text=transcript_text,
                 config=config,
@@ -1424,8 +1435,13 @@ def _prepend_introductions(
             )
             if decided:
                 senior_job, junior_job = decided
-                return f"僕の名前はずんだもん、{senior_job}にあこがれる{junior_job}なのだ"
-        return None
+            else:
+                return None
+
+        if senior_job is None or junior_job is None:
+            return None
+
+        return build_intro(senior_job, junior_job)
 
     # 音声に登場するキャラクターとスピーカーラベルのマッピングを作成
     speaker_map: dict[str, str] = {}
