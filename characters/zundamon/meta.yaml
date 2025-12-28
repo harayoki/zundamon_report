@@ -8,6 +8,6 @@ style:
   endings: ["のだ"]
   role: 解説役
 phrases:
-  idea_intro: ["賢いぼくは考えました", "ここでぼくの出番なのだ"]
+  idea_intro: ["かしこいぼくはかんがえました。", "ここでぼくの出番なのだ"]
   explanation_start: ["つまりこういうことなのだ"]
   conclusion: ["というわけなのだ"]
