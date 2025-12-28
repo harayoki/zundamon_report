@@ -288,8 +288,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--linebreak-min-chars",
         type=_positive_int,
-        default=18,
-        help="改行を検討する最小文字数の目安を指定します（デフォルト: 20）。",
+        default=16,
+        help="改行を検討する最小文字数の目安を指定します（デフォルト: 16）。",
     )
     parser.add_argument(
         "--kana-level",

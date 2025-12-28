@@ -215,7 +215,8 @@ python -m reportvox input.mp4 --speakers auto --mp3
   - `--llm {none,openai,ollama}`: 口調変換に使う LLM バックエンド。
   - `--ollama-host` / `--ollama-port` / `--ollama-model`: ローカルLLM接続先とモデル指定。
   - `--no-style-with-llm`: 口調変換を LLM で行わない。
-  - `--no-linebreak-with-llm`: 長いセリフへの改行挿入を無効化、`--linebreak-min-chars` で改行検討の長さを調整。
+  - `--no-linebreak-with-llm`: 長いセリフへの改行挿入を無効化。
+  - `--linebreak-min-chars` で改行検討の長さを調整。
   - `--kana-level`: 漢字のふりがなレベル（none/elementary/junior/high/college）。
 
 - **文字起こしのレビュー**
