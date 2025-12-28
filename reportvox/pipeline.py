@@ -211,11 +211,11 @@ def _collect_existing_outputs(
             existing.append(mov_path)
 
     if subtitle_mode == "all":
-        srt_path = out_dir / f"{base_name}.srt"
+        srt_path = out_dir / f"{base_name}_report.srt"
         if srt_path.exists():
             existing.append(srt_path)
     elif subtitle_mode == "split":
-        for path in sorted(out_dir.glob(f"{base_name}_*.srt")):
+        for path in sorted(out_dir.glob(f"{base_name}_report_*.srt")):
             if path.exists():
                 existing.append(path)
     return existing

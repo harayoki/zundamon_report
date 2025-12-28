@@ -174,9 +174,9 @@ python -m reportvox input.wav --output-name meeting_2024
 # 既存の出力がある場合も確認せず上書き
 python -m reportvox input.wav -f
 
-# 字幕 (SRT) を同時出力
-python -m reportvox input.wav --subtitles all  # 2話者を1つのファイルにまとめて出力
-python -m reportvox input.wav --subtitles split  # 話者ごとに別ファイルを出力
+# 字幕 (SRT) の出力設定（デフォルトで2話者を1つにまとめたSRTを out/ に保存）
+python -m reportvox input.wav --subtitles off    # SRT を出力しない
+python -m reportvox input.wav --subtitles split  # 話者ごとに別ファイルを追加で出力
 
 # 字幕付きの動画 (mp4/mov) を出力
 python -m reportvox input.wav --mp4  # mp4 を生成
@@ -231,7 +231,7 @@ python -m reportvox input.mp4 --speakers auto --mp3
 - --video-image-times: 各画像の表示開始秒を指定（--video-images と同数）。未指定時は尺を等分。
 - --video-image-pos: 画像の表示位置（"X,Y"）。
 - --video-image-scale: 動画に重ねる画像の拡大率（デフォルト 0.45）。
-- --subtitles {off,all,split}: SRT 字幕の出力モード。
+- --subtitles {off,all,split}: SRT 字幕の出力モード（デフォルト all、2話者を1つにまとめて出力。split で話者別ファイルも生成）。
 - --subtitle-max-chars: 字幕1枚あたりの最大文字数（デフォルト 25、0 で無制限）。
 - --subtitle-font: 動画用ASS字幕に使用するフォント名（libass で解決可能なもの）。
 - --subtitle-font-size: 動画用ASS字幕のフォントサイズ。デフォルトは 96 pt。
