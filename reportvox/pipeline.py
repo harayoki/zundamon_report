@@ -1588,28 +1588,88 @@ def _insert_line_breaks(
             if text:
                 response_map[seg_id] = text
 
+    refine_targets: dict[int, list[str]] = {}
+
+    for seg_id, text in response_map.items():
+        split_lines = [line.strip() for line in text.splitlines() if line.strip()]
+        if len(split_lines) < 2:
+            continue
+        if max(len(line) for line in split_lines) > config.linebreak_min_chars:
+            refine_targets[seg_id] = split_lines
+
+    if refine_targets:
+        refine_system_prompt = (
+            "あなたは日本語のセリフの改行位置を微調整するアシスタントです。\n"
+            "以下の規則に従ってください:\n"
+            "- 語句や順序は一切変更せず、改行位置のみを調整してください。\n"
+            "- すでにある改行を基準に、可能なら改行を1つ追加して行数を1行増やし、各行の長さのばらつきを減らしてください。結果は渡した行数より必ず1行多くなる状態を目指してください。\n"
+            "- 渡したすべての行で改行位置を調整して構いません。1行だけでなく全行を見直し、長さのばらつきを最小にしてください。\n"
+            "- 改行は\\nのみを使い、余計な記号や説明は入れないでください。\n"
+            "- <SEG id=...> と </SEG> で囲み、id は入力と同じものを使ってください。"
+        )
+
+        refine_lines: list[str] = [
+            f"次のセリフは改行済みですが、1行が{config.linebreak_min_chars}文字を超えています。",
+            "自然な区切りに改行を追加して、各行の長さが揃うようにしてください。",
+            "言い回しや句読点は変えず、渡した全ての行で改行のみを調整して構いません。渡した行数より1行多い状態にして、ばらつきを抑えてください。",
+            "入力と同じ順序で、各セグメントを <SEG id=...> で囲んで返してください。",
+        ]
+
+        for seg_id, split_lines in refine_targets.items():
+            refine_lines.append(f"<SEG id={seg_id}>")
+            refine_lines.extend(split_lines)
+            refine_lines.append("</SEG>")
+
+        refine_user_prompt = "\n".join(refine_lines)
+
+        refine_logger = prompt_logger(refine_system_prompt, refine_user_prompt) if prompt_logger else None
+
+        try:
+            refine_content = chat_completion(
+                system_prompt=refine_system_prompt,
+                user_prompt=refine_user_prompt,
+                config=config,
+            )
+            if refine_logger:
+                refine_logger(refine_content)
+        except Exception as exc:
+            if refine_logger:
+                refine_logger(exc)
+            refine_content = ""
+
+        if refine_content and re.search(r"\\{1,2}N", refine_content):
+            raise ValueError("LLM 応答に許可されていないエスケープ表現 (\\N など) が含まれています。")
+
+        if refine_content:
+            for match in re.finditer(r"<SEG id=(\d+)>\s*(.*?)\s*</SEG>", refine_content, re.DOTALL):
+                try:
+                    seg_id = int(match.group(1))
+                except ValueError:
+                    continue
+                text = match.group(2).strip()
+                if text:
+                    response_map[seg_id] = text
+
     for idx, seg in enumerate(segments):
         new_text = response_map.get(idx, seg.text)
-        lines = [line.strip() for line in new_text.splitlines()]
-        lines = [line for line in lines if line]
-
-        wrapped_lines: list[str] = []
-        for line in lines:
-            if len(line) <= config.linebreak_min_chars:
-                wrapped_lines.append(line)
-                continue
-
-            start = 0
-            while start < len(line):
-                end = min(start + config.linebreak_min_chars, len(line))
-                wrapped_lines.append(line[start:end])
-                start = end
-
-        if wrapped_lines:
-            lines = wrapped_lines
+        lines = [line.strip() for line in new_text.splitlines() if line.strip()]
 
         if not lines:
             lines = [seg.text]
+
+        if max(len(line) for line in lines) > config.linebreak_min_chars:
+            fallback_lines: list[str] = []
+            original_text = seg.text
+            if not original_text.strip():
+                original_text = new_text
+
+            start = 0
+            while start < len(original_text):
+                end = min(start + config.linebreak_min_chars, len(original_text))
+                fallback_lines.append(original_text[start:end])
+                start = end
+
+            lines = fallback_lines if fallback_lines else lines
 
         if len(lines) == 1 or not config.linebreak_split_segments:
             text = "\n".join(lines)
