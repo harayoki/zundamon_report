@@ -50,6 +50,7 @@ class PipelineConfig:
     video_fps: int = 24
     output_mp4: bool = False
     output_mov: bool = False
+    video_split: bool = False
     review_transcript: TranscriptReviewMode = "llm"
     style_with_llm: bool = True
     linebreak_with_llm: bool = True
