@@ -281,8 +281,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--linebreak-min-chars",
         type=_positive_int,
-        default=40,
-        help="改行を検討する最小文字数の目安を指定します（デフォルト: 40）。",
+        default=36,
+        help="改行を検討する最小文字数の目安を指定します（デフォルト: 36）。",
     )
     parser.add_argument(
         "--resume-from",

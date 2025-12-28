@@ -5,7 +5,7 @@ voicevox:
   speaker_id: 2
 style:
   first_person: わたし
-  endings: ["するわ", "ね", "かしら"]
+  endings: []
   role: ツッコミ役
 phrases:
   idea_intro: ["ここからは私、めたんが説明するわ"]

@@ -5,7 +5,7 @@ voicevox:
   speaker_id: 3
 style:
   first_person: ぼく
-  endings: ["なのだ", "なのだよ"]
+  endings: ["のだ"]
   role: 解説役
 phrases:
   idea_intro: ["賢いぼくは考えました", "ここでぼくの出番なのだ"]
