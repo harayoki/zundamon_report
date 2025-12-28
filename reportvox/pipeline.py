@@ -928,6 +928,7 @@ def _step_stylize(state: PipelineState) -> None:
             config=config,
             prompt_logger=linebreak_prompt_logger,
         )
+        stylized = _remove_empty_lines(stylized)
         _save_stylized(stylized, stylized_path)
         _log_style_diff(mapped, stylized, run_dir / "diff_style.log")
         reporter.log("口調変換が完了し保存しました。")
@@ -1704,3 +1705,24 @@ def _insert_line_breaks(
             )
 
     return adjusted
+
+
+def _remove_empty_lines(
+    segments: Sequence[style_convert.StylizedSegment],
+) -> list[style_convert.StylizedSegment]:
+    cleaned: list[style_convert.StylizedSegment] = []
+
+    for seg in segments:
+        lines = [line for line in seg.text.splitlines() if line.strip()]
+        new_text = "\n".join(lines)
+        cleaned.append(
+            style_convert.StylizedSegment(
+                start=seg.start,
+                end=seg.end,
+                text=new_text,
+                speaker=seg.speaker,
+                character=seg.character,
+            )
+        )
+
+    return cleaned
