@@ -53,6 +53,7 @@ class PipelineConfig:
     review_transcript: TranscriptReviewMode = "llm"
     style_with_llm: bool = True
     linebreak_with_llm: bool = True
+    linebreak_split_segments: bool = False
     linebreak_min_chars: int = 18
     kana_level: KanaTargetLevel = "high"
     diarization_threshold: float = 0.8
