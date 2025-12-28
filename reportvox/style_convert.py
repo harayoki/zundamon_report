@@ -24,26 +24,24 @@ class StylizedSegment:
     character: str
 
 
-def _insert_phrase(text: str, phrases: list[str]) -> str:
-    if not phrases or len(text) < 8:
-        return text
-    # 複数回の挿入を避け、先頭か末尾にランダムで挿入する
-    phrase = random.choice(phrases)
-    if random.random() < 0.5:
-        return f"{phrase}。{text}"
-    return f"{text}。{phrase}"
-
-
-def _heuristic_phrase(segment: AlignedSegment, meta: CharacterMeta, inserted: set[str]) -> str:
+def _heuristic_phrases(
+    segment: AlignedSegment, meta: CharacterMeta, inserted: set[str]
+) -> list[str]:
     text = segment.text
-    if segment.character in inserted:
-        return text
+    character_id = segment.character or meta.id
+    if character_id in inserted:
+        return [text]
     if len(text) < 12:
-        return text
+        return [text]
+
+    ideas = meta.phrases.get("idea_intro", [])
+    if not ideas:
+        return [text]
+
     # 簡易ヒューリスティック（自己紹介など）
-    text = _insert_phrase(text, meta.phrases.get("idea_intro", []))
-    inserted.add(segment.character or "")
-    return text
+    phrase = random.choice(ideas)
+    inserted.add(character_id)
+    return [phrase, text]
 
 
 def _character_traits(meta: CharacterMeta) -> list[str]:
@@ -193,7 +191,11 @@ def _llm_transform(
         if response_logger:
             response_logger(content)
         # 応答が空行を含む場合があるので、空行は除去する
-        return [line for line in content.splitlines() if line.strip()]
+        lines = [line for line in content.splitlines() if line.strip()]
+        # LLM が改行を挿入しても、1つのセグメントとして扱う
+        if len(lines) > 1:
+            return ["\n".join(lines)]
+        return lines or [text]
     except Exception as exc:
         if response_logger:
             response_logger(exc)
@@ -237,7 +239,7 @@ def apply_style(
             texts = _llm_transform(seg.text, meta, config, prompt_logger=prompt_logger)
         if len(texts) == 1:
             # LLMが分割しなかった場合は、ヒューリスティックな口癖挿入を試みる
-            texts = [_heuristic_phrase(seg, meta, inserted)]
+            texts = _heuristic_phrases(seg, meta, inserted)
 
         # 分割されたセグメントを生成
         if len(texts) == 1:
