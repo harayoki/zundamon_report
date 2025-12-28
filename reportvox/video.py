@@ -211,7 +211,7 @@ def render_video_with_subtitles(
             "-shortest",
             str(output),
         ]
-
+    print(cmd)
     try:
         subprocess.run(
             cmd,

@@ -221,10 +221,10 @@ python -m reportvox input.mp4 --speakers auto --mp3
 - --review-transcript: 文字起こし結果を保存したあとで処理を停止し、transcript.json を手動修正したうえで表示される再開コマンドを実行して続行できるようにする。
 - --review-transcript-llm: 文字起こし結果を保存したあと、LLM で明らかな誤字脱字を自動校正してから続行する（--llm でバックエンド指定）。
 - --skip-review-transcript: 誤字脱字の自動校正を行わずに次の工程へ進みます。
-
-## 動画書き出しオプション
 - --mp4: 字幕入りの mp4 を生成。
 - --mov: 字幕入り・透明背景の mov (ProRes 4444) を生成。
+
+## 動画書き出し制御オプション
 - --video-width / --video-height: 動画の解像度をピクセルで指定（デフォルト 1080x1920）。
 - --video-fps: 動画のフレームレート。デフォルト 24 fps。
 - --video-images: 動画上に順番に表示する画像ファイルのパスを指定（複数指定可）。
