@@ -197,8 +197,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--max-pause",
         type=_non_negative_float,
-        default=0.2,
-        help="セリフ間の無音をこの秒数までに詰めて結合します（デフォルト 0.2）。0 で詰めない。",
+        default=0.1,
+        help="セリフ間の無音をこの秒数までに詰めて結合します（デフォルト 0.1）。0 で詰めない。",
     )
     parser.add_argument(
         "--resume",
@@ -281,8 +281,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--linebreak-min-chars",
         type=_positive_int,
-        default=22,
-        help="改行を検討する最小文字数の目安を指定します（デフォルト: 22）。",
+        default=20,
+        help="改行を検討する最小文字数の目安を指定します（デフォルト: 20）。",
     )
     parser.add_argument(
         "--kana-level",
