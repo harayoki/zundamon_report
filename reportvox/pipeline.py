@@ -9,6 +9,7 @@ import math
 import os
 import pathlib
 import re
+import random
 import shutil
 import sys
 import time
@@ -1301,7 +1302,8 @@ def _decide_zunda_jobs(
 
     system_prompt = (
         "あなたは、音声レポートのテーマに合う職業を提案する日本語アシスタントです。\n"
-        "出力は JSON 形式のみで、キーは 'zunda_senior_job' と 'zunda_junior_job' のみを含めてください。\n"
+        "出力は JSON 配列で、要素は必ず 4 つにしてください。\n"
+        "各要素はオブジェクトとし、キーは 'zunda_senior_job' と 'zunda_junior_job' のみを含めてください。\n"
         "説明文や余計な文字は入れず、必ず日本語で短い職業名だけを返してください。"
     )
 
@@ -1309,7 +1311,7 @@ def _decide_zunda_jobs(
         "以下の内容に関連する、ずんだもんの職業設定を考えてください。\n"
         "- zunda_senior_job: レポート全体の話題に関連し、憧れの対象になりそうな華やかな職業。\n"
         "- zunda_junior_job: 上記と対比になる、現実がちょっぴり厳しそうでコミカルな仕事。\n"
-        "短く親しみやすい言い回しで、聞いてクスッとできる組み合わせにしてください。\n"
+        "短く親しみやすい言い回しで、聞いてクスッとできる組み合わせを 4 通り提案してください。\n"
         "会話内容の概要:\n"
         f"{context}"
     )
@@ -1334,8 +1336,23 @@ def _decide_zunda_jobs(
             log_response(content)
         payload = _extract_json_payload(content)
         data = json.loads(payload)
-        senior_job = str(data.get("zunda_senior_job", "")).strip()
-        junior_job = str(data.get("zunda_junior_job", "")).strip()
+        raw_candidates: list[dict[str, str]] = []
+        if isinstance(data, list):
+            raw_candidates = data
+        elif isinstance(data, dict):
+            if isinstance(data.get("candidates"), list):
+                raw_candidates = data.get("candidates", [])
+            else:
+                raw_candidates = [data]
+
+        candidates: list[tuple[str, str]] = []
+        for item in raw_candidates:
+            if not isinstance(item, dict):
+                continue
+            senior_job = str(item.get("zunda_senior_job", "")).strip()
+            junior_job = str(item.get("zunda_junior_job", "")).strip()
+            if senior_job and junior_job:
+                candidates.append((senior_job, junior_job))
     except json.JSONDecodeError as exc:
         if log_response:
             log_response(exc)
@@ -1351,16 +1368,23 @@ def _decide_zunda_jobs(
         reporter.log(f"ずんだもんの職業生成に失敗したため、省略します: {exc}")
         return None
 
-    if not senior_job or not junior_job:
+    if not candidates:
         reporter.log("LLM 応答に必要な職業情報が含まれていなかったため、省略します。")
         return None
 
-    config.zunda_senior_job = senior_job
-    config.zunda_junior_job = junior_job
+    selected_senior, selected_junior = random.choice(candidates)
+    config.zunda_senior_job = selected_senior
+    config.zunda_junior_job = selected_junior
     if prompt_log_path is not None:
         reporter.log(f"ずんだもん職業プロンプトを {prompt_log_path.name} に保存しました。")
-    reporter.log(f"LLM がずんだもんの職業を決定しました: 憧れ={senior_job} / 現在={junior_job}")
-    return senior_job, junior_job
+    reporter.log(
+        "LLM がずんだもんの職業候補を生成しました: "
+        + " | ".join(f"憧れ={s} / 現在={j}" for s, j in candidates)
+    )
+    reporter.log(
+        f"候補からランダムに選択しました: 憧れ={selected_senior} / 現在={selected_junior}"
+    )
+    return selected_senior, selected_junior
 
 
 def _prepend_introductions(
