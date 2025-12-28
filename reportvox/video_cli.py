@@ -326,14 +326,6 @@ def main(argv: Sequence[str] | None = None) -> None:
         normalized_audio = _ensure_wav(audio_path, work_dir, ffmpeg_path=ffmpeg_path, env_info=env_info)
         video_duration = audio.read_wav_duration(normalized_audio)
 
-        merged_srt_path = work_dir / "video_subtitles.srt"
-        subtitles.write_merged_srt_for_video(
-            subtitle_segments,
-            path=merged_srt_path,
-            characters={char1.id: char1, char2.id: char2},
-            max_chars_per_line=subtitle_max_chars,
-        )
-
         ass_path = work_dir / "video_subtitles.ass"
         subtitles.write_ass_subtitles(
             subtitle_segments,
