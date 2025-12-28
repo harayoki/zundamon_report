@@ -288,7 +288,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--linebreak-min-chars",
         type=_positive_int,
-        default=20,
+        default=18,
         help="改行を検討する最小文字数の目安を指定します（デフォルト: 20）。",
     )
     parser.add_argument(
