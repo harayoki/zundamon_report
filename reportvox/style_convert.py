@@ -68,6 +68,23 @@ def _examples_block(meta: CharacterMeta) -> str:
     return f"口調の例:\n{examples}\n"
 
 
+def _kana_instruction(level: str) -> str:
+    level_labels = {
+        "elementary": "小学生",
+        "junior": "中学生",
+        "high": "高校生",
+        "college": "大学生",
+    }
+    if level == "none":
+        return ""
+
+    target = level_labels.get(level, level)
+    return (
+        f"- 読み手は{target}程度の漢字力と想定し、その水準を超える難しい漢字はひらがなまたはカタカナに置き換えてください。\n"
+        "- 固有名詞や一般に漢字表記される専門用語は意味が変わらない範囲で残して構いません。\n"
+    )
+
+
 def _llm_transform_batch(
     texts: Sequence[str],
     meta: CharacterMeta,
@@ -84,6 +101,7 @@ def _llm_transform_batch(
     traits = _character_traits(meta)
     trait_block = "\n".join(traits) if traits else "特徴: なし"
     examples_block = _examples_block(meta)
+    kana_rule = _kana_instruction(config.kana_level)
 
     system_prompt = (
         "あなたは、与えられたキャラクターになりきって文章のスタイルを変換する、プロの日本語文体アシスタントです。\n"
@@ -94,6 +112,7 @@ def _llm_transform_batch(
         "- 元の文章の意味、固有名詞、専門用語を絶対に変えないでください。\n"
         "- 英語に翻訳しないでください。\n"
     )
+    system_prompt += kana_rule
 
     user_prompt = (
         f"キャラクター『{meta.display_name or meta.id}』の口調に合わせてください。\n"
@@ -140,6 +159,7 @@ def _llm_transform(
         return [text]
 
     examples_block = _examples_block(meta)
+    kana_rule = _kana_instruction(config.kana_level)
     system_prompt = (
         "あなたは、与えられたキャラクターになりきって文章のスタイルを変換する、プロの日本語文体アシスタントです。\n"
         "以下のルールを厳密に守ってください:\n"
@@ -149,6 +169,7 @@ def _llm_transform(
         "- 元の文章の意味、固有名詞、専門用語を絶対に変えないでください。\n"
         "- 英語に翻訳しないでください。\n"
     )
+    system_prompt += kana_rule
     user_prompt = (
         f"キャラクター「{meta.display_name or meta.id}」の話し方を参考に、以下の文章を自然な話し言葉に変換してください。\n"
         f"口癖: {', '.join(meta.phrases.get('default', []))}\n"
