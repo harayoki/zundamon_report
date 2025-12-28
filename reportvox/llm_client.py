@@ -24,8 +24,13 @@ def chat_completion(
     config: PipelineConfig,
     env_info: EnvironmentInfo | None = None,
     ollama_options_overwrite: dict | None = None,
+    temperature: float | None = None,
+    top_p: float | None = None,
     timeout: float = 60.0,
 ) -> str:
+    temperature_value = 0.0 if temperature is None else temperature
+    top_p_value = 1.0 if top_p is None else top_p
+
     backend = config.llm_backend
     if backend == "none":
         raise RuntimeError(
@@ -47,7 +52,8 @@ def chat_completion(
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            "temperature": 0.0,
+            "temperature": temperature_value,
+            "top_p": top_p_value,
         }
 
         try:
@@ -102,8 +108,8 @@ def chat_completion(
             {"role": "user", "content": user_prompt},
         ]
         options: dict = {
-            "temperature": 0.0,
-            "top_p": 1.0,
+            "temperature": temperature_value,
+            "top_p": top_p_value,
             "repeat_penalty": 1.0,
         }
         if ollama_options_overwrite:
