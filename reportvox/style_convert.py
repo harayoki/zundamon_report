@@ -60,6 +60,14 @@ def _character_traits(meta: CharacterMeta) -> list[str]:
     return traits
 
 
+def _examples_block(meta: CharacterMeta) -> str:
+    if not meta.examples:
+        return ""
+
+    examples = "\n".join(f"- {example}" for example in meta.examples)
+    return f"口調の例:\n{examples}\n"
+
+
 def _llm_transform_batch(
     texts: Sequence[str],
     meta: CharacterMeta,
@@ -75,6 +83,7 @@ def _llm_transform_batch(
 
     traits = _character_traits(meta)
     trait_block = "\n".join(traits) if traits else "特徴: なし"
+    examples_block = _examples_block(meta)
 
     system_prompt = (
         "あなたは、与えられたキャラクターになりきって文章のスタイルを変換する、プロの日本語文体アシスタントです。\n"
@@ -89,6 +98,7 @@ def _llm_transform_batch(
     user_prompt = (
         f"キャラクター『{meta.display_name or meta.id}』の口調に合わせてください。\n"
         f"{trait_block}\n"
+        f"{examples_block}"
         "以下に並ぶ会話文を順番に口調変換し、対応する結果だけを改行区切りで出力してください。"
         "指示や特徴の説明は上記だけで十分なので、出力は会話文だけにしてください。\n"
         "会話文:\n"
@@ -129,6 +139,7 @@ def _llm_transform(
         # Gemini は文字起こし校正専用。口調変換は従来ロジックに任せる。
         return [text]
 
+    examples_block = _examples_block(meta)
     system_prompt = (
         "あなたは、与えられたキャラクターになりきって文章のスタイルを変換する、プロの日本語文体アシスタントです。\n"
         "以下のルールを厳密に守ってください:\n"
@@ -141,6 +152,7 @@ def _llm_transform(
     user_prompt = (
         f"キャラクター「{meta.display_name or meta.id}」の話し方を参考に、以下の文章を自然な話し言葉に変換してください。\n"
         f"口癖: {', '.join(meta.phrases.get('default', []))}\n"
+        f"{examples_block}"
         f"文章: {text}"
     )
     response_logger = prompt_logger(system_prompt, user_prompt) if prompt_logger else None
