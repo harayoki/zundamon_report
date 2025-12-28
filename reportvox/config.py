@@ -40,7 +40,7 @@ class PipelineConfig:
     resume_from: Optional[str] = None
     force_transcribe: bool = False
     force_diarize: bool = False
-    subtitle_mode: SubtitleMode = "off"
+    subtitle_mode: SubtitleMode = "all"
     subtitle_max_chars: int = 25
     subtitle_font: Optional[str] = None
     subtitle_font_size: int = 42

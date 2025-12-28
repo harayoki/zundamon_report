@@ -180,8 +180,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--subtitles",
         choices=["off", "all", "split"],
-        default="off",
-        help="字幕データの出力モード: off=生成なし / all=すべての発話を1ファイル / split=話者ごとに別ファイル。",
+        default="all",
+        help="字幕データの出力モード: off=生成なし / all=すべての発話を1ファイル（デフォルト） / split=話者ごとに別ファイル。",
     )
     add_video_arguments(
         parser,
