@@ -1599,9 +1599,15 @@ def _insert_line_breaks(
                 wrapped_lines.append(line)
                 continue
 
+            wrap_at = max(1, int(config.linebreak_min_chars * 0.7))
             start = 0
             while start < len(line):
-                end = min(start + config.linebreak_min_chars, len(line))
+                remaining = len(line) - start
+                if remaining <= config.linebreak_min_chars:
+                    wrapped_lines.append(line[start:])
+                    break
+
+                end = min(start + wrap_at, len(line))
                 wrapped_lines.append(line[start:end])
                 start = end
 
