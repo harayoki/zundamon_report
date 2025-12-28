@@ -9,6 +9,7 @@ import pathlib
 import shutil
 import sys
 import tempfile
+from dataclasses import dataclass, field
 from typing import Sequence
 
 from . import audio, characters, subtitles, utils, video
@@ -23,6 +24,26 @@ def _positive_nonzero_int(value: str) -> int:
         raise argparse.ArgumentTypeError(f"正の整数を指定してください: {value}") from exc
     if number <= 0:
         raise argparse.ArgumentTypeError(f"正の整数を指定してください: {value}")
+    return number
+
+
+def _non_negative_int(value: str) -> int:
+    try:
+        number = int(value)
+    except ValueError as exc:  # pragma: no cover - argparse handles messaging
+        raise argparse.ArgumentTypeError(f"整数を指定してください: {value}") from exc
+    if number < 0:
+        raise argparse.ArgumentTypeError(f"0 以上の整数を指定してください: {value}")
+    return number
+
+
+def _positive_float(value: str) -> float:
+    try:
+        number = float(value)
+    except ValueError as exc:  # pragma: no cover - argparse handles messaging
+        raise argparse.ArgumentTypeError(f"数値を指定してください: {value}") from exc
+    if number <= 0:
+        raise argparse.ArgumentTypeError(f"正の数を指定してください: {value}")
     return number
 
 
@@ -91,6 +112,75 @@ def _resolve_colors(char1: characters.CharacterMeta, char2: characters.Character
     return {char1.id: resolved1, char2.id: resolved2}
 
 
+@dataclass
+class VideoArgumentDefaults:
+    subtitle_font: str | None = None
+    subtitle_font_size: int | None = None
+    subtitle_max_chars: int | None = None
+    video_width: int | None = None
+    video_height: int | None = None
+    video_fps: int | None = None
+    video_images: list[str] | None = field(default_factory=list)
+    video_image_times: list[float] | None = None
+    video_image_scale: float | None = None
+    video_image_pos: tuple[int, int] | None = None
+
+
+def add_video_arguments(parser: argparse.ArgumentParser, *, defaults: VideoArgumentDefaults) -> None:
+    parser.add_argument("--subtitle-font", default=defaults.subtitle_font, help="動画字幕に使用するフォント名。")
+    parser.add_argument(
+        "--subtitle-font-size",
+        type=_positive_nonzero_int,
+        default=defaults.subtitle_font_size,
+        help="動画字幕のフォントサイズ (pt)。",
+    )
+    parser.add_argument(
+        "--subtitle-max-chars",
+        type=_non_negative_int,
+        default=defaults.subtitle_max_chars,
+        help="字幕1枚あたりの最大文字数。",
+    )
+    parser.add_argument("--video-width", type=_positive_nonzero_int, default=defaults.video_width, help="動画出力時の横幅 (ピクセル)。")
+    parser.add_argument("--video-height", type=_positive_nonzero_int, default=defaults.video_height, help="動画出力時の縦幅 (ピクセル)。")
+    parser.add_argument("--video-fps", type=_positive_nonzero_int, default=defaults.video_fps, help="動画出力時のフレームレート。")
+    parser.add_argument(
+        "--video-images",
+        nargs="+",
+        default=defaults.video_images if defaults.video_images is not None else None,
+        metavar="PATH",
+        help="動画上に重ねる画像ファイルのパス。",
+    )
+    parser.add_argument(
+        "--video-image-times",
+        nargs="+",
+        type=_non_negative_float,
+        default=defaults.video_image_times,
+        metavar="SECONDS",
+        help="各画像の表示開始秒。--video-images と組み合わせて使用します。",
+    )
+    parser.add_argument(
+        "--video-image-scale",
+        type=_positive_float,
+        default=defaults.video_image_scale,
+        help="動画に重ねる画像の拡大率。",
+    )
+    parser.add_argument(
+        "--video-image-pos",
+        type=_xy_pair,
+        default=defaults.video_image_pos,
+        help="画像の表示位置 (左上基準 'X,Y')。省略時は自動配置。",
+    )
+
+
+def validate_video_image_args(
+    parser: argparse.ArgumentParser, video_images: list[str] | None, video_image_times: list[float] | None
+) -> None:
+    if video_image_times is not None and not video_images:
+        parser.error("--video-image-times を使用する場合は --video-images も指定してください。")
+    if video_image_times is not None and video_images is not None and len(video_image_times) != len(video_images):
+        parser.error("--video-image-times のは --video-images に指定した画像数と一致させてください。")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="reportvox-mp4",
@@ -107,28 +197,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--speaker2", default=None, help="副話者に対応するキャラクター ID。")
     parser.add_argument("--color1", default=None, help="話者1に使うカラーコード (#RRGGBB)。")
     parser.add_argument("--color2", default=None, help="話者2に使うカラーコード (#RRGGBB)。")
-    parser.add_argument("--subtitle-font", default=None, help="動画字幕に使用するフォント名。")
-    parser.add_argument("--subtitle-font-size", type=_positive_nonzero_int, default=None, help="動画字幕のフォントサイズ (pt)。")
-    parser.add_argument("--subtitle-max-chars", type=_positive_nonzero_int, default=None, help="字幕1枚あたりの最大文字数。")
-    parser.add_argument("--video-width", type=_positive_nonzero_int, default=None, help="動画出力時の横幅 (ピクセル)。")
-    parser.add_argument("--video-height", type=_positive_nonzero_int, default=None, help="動画出力時の縦幅 (ピクセル)。")
-    parser.add_argument("--video-fps", type=_positive_nonzero_int, default=None, help="動画出力時のフレームレート。")
-    parser.add_argument("--video-images", nargs="+", default=None, metavar="PATH", help="動画上に重ねる画像ファイルのパス。")
-    parser.add_argument(
-        "--video-image-times",
-        nargs="+",
-        type=_non_negative_float,
-        default=None,
-        metavar="SECONDS",
-        help="各画像の表示開始秒。--video-images と組み合わせて使用します。",
-    )
-    parser.add_argument("--video-image-scale", type=float, default=None, help="動画に重ねる画像の拡大率。")
-    parser.add_argument(
-        "--video-image-pos",
-        type=_xy_pair,
-        default=None,
-        help="画像の表示位置 (左上基準 'X,Y')。省略時は自動配置。",
-    )
+    add_video_arguments(parser, defaults=VideoArgumentDefaults(video_images=None))
     return parser
 
 
@@ -214,10 +283,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     video_image_paths = [pathlib.Path(p).expanduser().resolve() for p in video_images] if video_images else []
 
     video_image_times = args.video_image_times if video_images_arg is not None else metadata.get("video_image_times")
-    if video_image_times is not None and video_images is None:
-        parser.error("--video-image-times を使用する場合は --video-images も指定してください。")
-    if video_image_times is not None and video_images is not None and len(video_image_times) != len(video_images):
-        parser.error("--video-image-times の数は --video-images に指定した画像数と一致させてください。")
+    validate_video_image_args(parser, video_images, video_image_times)
 
     video_image_scale = _resolve_from_metadata(args.video_image_scale, metadata.get("video_image_scale"), 0.45)
     video_image_pos = args.video_image_pos if args.video_image_pos is not None else metadata.get("video_image_position")

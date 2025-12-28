@@ -12,6 +12,12 @@ from reportvox import utils
 from reportvox.config import PipelineConfig
 from reportvox.envinfo import resolve_hf_token
 from reportvox.pipeline import run_pipeline
+from reportvox.video_cli import (
+    VideoArgumentDefaults,
+    _non_negative_float,
+    add_video_arguments,
+    validate_video_image_args,
+)
 
 
 def _positive_float(value: str) -> float:
@@ -32,33 +38,6 @@ def _positive_int(value: str) -> int:
     if number < 0:
         raise argparse.ArgumentTypeError(f"0 以上の整数を指定してください: {value}")
     return number
-
-
-def _positive_nonzero_int(value: str) -> int:
-    number = _positive_int(value)
-    if number <= 0:
-        raise argparse.ArgumentTypeError(f"正の整数を指定してください: {value}")
-    return number
-
-
-def _non_negative_float(value: str) -> float:
-    try:
-        number = float(value)
-    except ValueError as exc:  # pragma: no cover - argparse handles messaging
-        raise argparse.ArgumentTypeError(f"数値を指定してください: {value}") from exc
-    if number < 0:
-        raise argparse.ArgumentTypeError(f"0 以上の数を指定してください: {value}")
-    return number
-
-
-def _xy_pair(value: str) -> tuple[int, int]:
-    try:
-        x_str, y_str = value.split(",", maxsplit=1)
-        x_pos = int(x_str)
-        y_pos = int(y_str)
-    except Exception as exc:  # pragma: no cover - argparse handles messaging
-        raise argparse.ArgumentTypeError("位置は 'X,Y' 形式の整数で指定してください。") from exc
-    return (x_pos, y_pos)
 
 
 def _port(value: str) -> int:
@@ -204,63 +183,20 @@ def build_parser() -> argparse.ArgumentParser:
         default="off",
         help="字幕データの出力モード: off=生成なし / all=すべての発話を1ファイル / split=話者ごとに別ファイル。",
     )
-    parser.add_argument(
-        "--subtitle-max-chars",
-        type=_positive_int,
-        default=25,
-        help="字幕1枚あたりの最大文字数。0 で制限なし。デフォルトは 25。",
-    )
-    parser.add_argument("--subtitle-font", default=None, help="動画字幕に使用するフォント名 (libass 経由で解決できるもの)。")
-    parser.add_argument(
-        "--subtitle-font-size",
-        type=_positive_nonzero_int,
-        default=84,
-        help="動画字幕のフォントサイズ (pt)。デフォルトは 84。",
-    )
-    parser.add_argument(
-        "--video-width",
-        type=_positive_nonzero_int,
-        default=1080,
-        help="動画出力時の横幅 (ピクセル)。",
-    )
-    parser.add_argument(
-        "--video-height",
-        type=_positive_nonzero_int,
-        default=1920,
-        help="動画出力時の縦幅 (ピクセル)。",
-    )
-    parser.add_argument(
-        "--video-fps",
-        type=_positive_nonzero_int,
-        default=24,
-        help="動画出力時のフレームレート。",
-    )
-    parser.add_argument(
-        "--video-images",
-        nargs="+",
-        default=[],
-        metavar="PATH",
-        help="動画上に順番に表示する画像ファイルのパスを指定します（スペース区切りで複数指定）。",
-    )
-    parser.add_argument(
-        "--video-image-scale",
-        type=_positive_float,
-        default=0.45,
-        help="動画に重ねる画像の拡大率。1.0 が原寸で、すべての画像に共通します。",
-    )
-    parser.add_argument(
-        "--video-image-pos",
-        type=_xy_pair,
-        default=None,
-        help="画像の表示位置をピクセル単位で指定します（左上基準 'X,Y'）。省略時は字幕と重ならない位置に自動配置。",
-    )
-    parser.add_argument(
-        "--video-image-times",
-        nargs="+",
-        type=_non_negative_float,
-        default=None,
-        metavar="SECONDS",
-        help="各画像の表示開始秒を指定します（0 始まりでなくても可）。未指定時は動画尺を画像数で等分します。",
+    add_video_arguments(
+        parser,
+        defaults=VideoArgumentDefaults(
+            subtitle_max_chars=25,
+            subtitle_font=None,
+            subtitle_font_size=84,
+            video_width=1080,
+            video_height=1920,
+            video_fps=24,
+            video_images=[],
+            video_image_scale=0.45,
+            video_image_pos=None,
+            video_image_times=None,
+        ),
     )
     parser.add_argument(
         "--review-transcript",
@@ -307,10 +243,7 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
         parser.error("--review-transcript と --review-transcript-llm は同時に指定できません。")
     if args.skip_review_transcript and (args.review_transcript or args.review_transcript_llm):
         parser.error("--skip-review-transcript は他の誤字脱字校正オプションと同時に指定できません。")
-    if args.video_image_times is not None and not args.video_images:
-        parser.error("--video-image-times を使用する場合は --video-images も指定してください。")
-    if args.video_image_times is not None and len(args.video_image_times) != len(args.video_images):
-        parser.error("--video-image-times の数は --video-images に指定した画像数と一致させてください。")
+    validate_video_image_args(parser, args.video_images, args.video_image_times)
 
     input_path = pathlib.Path(args.input).expanduser().resolve() if args.input else None
     video_images = [pathlib.Path(p).expanduser().resolve() for p in args.video_images]
