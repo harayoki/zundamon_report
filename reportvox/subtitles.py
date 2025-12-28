@@ -277,9 +277,9 @@ def _escape_ass_text(text: str) -> str:
     normalized = text.replace("\\n", "\n").replace("\\N", "\n")
     return (
         normalized.replace("\\", r"\\")
-        .replace("{", r"\\{")
-        .replace("}", r"\\}")
-        .replace("\n", r"\\N")
+        .replace("{", r"\{")
+        .replace("}", r"\}")
+        .replace("\n", r"\N")
     )
 
 

@@ -212,12 +212,13 @@ def convert_to_mp3(
         str(dest),
     ]
     try:
+        print(" ".join(cmd))
         subprocess.run(
             cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, encoding="utf-8"
         )
     except subprocess.CalledProcessError as exc:
         error_output = exc.stderr or "(ffmpeg からの出力はありません)"
-        print(f"[reportvox] mp3生成時の ffmpeg エラー:\n{error_output}")
+        # print(f"[reportvox] mp3生成時の ffmpeg エラー:\n{error_output}")
         error_message = f"ffmpegによるmp3生成に失敗しました。ffmpegからのエラー:\n{error_output}"
         raise RuntimeError(append_env_details(error_message, env_info)) from exc
 
