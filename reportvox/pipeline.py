@@ -1051,6 +1051,7 @@ def _suggest_video_boundaries_with_llm(
     segments: Sequence[style_convert.StylizedSegment],
     *,
     total_duration: float,
+    desired_part_count: int,
     config: PipelineConfig,
     run_dir: pathlib.Path,
     reporter: _ProgressReporter,
@@ -1058,12 +1059,15 @@ def _suggest_video_boundaries_with_llm(
 ) -> list[float] | None:
     prompt_logger = _create_prompt_logger(run_dir / "prompt_video_split_llm.log", "Video Split LLM Prompt")
     segment_outline = _summarize_segments_for_prompt(segments)
+    boundary_goal = max(0, desired_part_count - 1)
+    boundary_budget = max(boundary_goal, boundary_goal * 2)
 
     system_prompt = (
         "あなたは動画編集のアシスタントです。字幕セグメントの区切りだけを使って動画を複数のパートに分割します。\n"
         "- 各パートの長さは180秒未満にしてください。\n"
         "- 分割点は必ずセグメント間に置き、セグメント途中では分割しません。\n"
         "- 必要に応じて複数の分割点を選び、自然な会話のまとまりを優先してください。\n"
+        "- 目標の分割数に対して余裕をもって候補を挙げてください (例: 必要な分割点の約2倍)。\n"
         "- 余裕をもって充分 N 本で収まる場合は N+1 本に増やさないでください。会話の切れ目であれば多少不自然でも構いません。\n"
         "- 応答は JSON オブジェクトのみ。形式: {\"boundaries\": [秒数の配列]}。\n"
         "- 配列は昇順で、最終的な終了時刻は含めません。"
@@ -1072,6 +1076,8 @@ def _suggest_video_boundaries_with_llm(
     user_prompt = (
         "動画全体を 3 分未満のパートに分けます。分割点はセグメントの境界のみを使用してください。\n"
         f"動画尺: {total_duration:.1f} 秒。\n"
+        f"目標本数: {max(1, desired_part_count)} 本 (理想的な分割点: {boundary_goal} 箇所)。\n"
+        f"分割点の候補は {boundary_budget} 箇所程度まで挙げてください。\n"
         "以下の字幕セグメントを参考に、自然な切れ目になりそうな境界秒を選んでください。\n"
         f"{segment_outline}"
     )
@@ -1164,28 +1170,56 @@ def _fill_long_gaps(boundaries: list[float], allowed: list[float], total_duratio
 def _calc_even_boundaries(
     allowed: list[float], total_duration: float, desired_part_count: int
 ) -> list[float]:
+    allowed_sorted = sorted(b for b in allowed if 0.0 < b < total_duration)
+
+    if desired_part_count <= 1 or not allowed_sorted:
+        return []
+
+    # 分割候補が不足している場合は利用できる境界の数に合わせる
+    part_count = min(desired_part_count, len(allowed_sorted) + 1)
+    target_length = total_duration / part_count
+
+    points = [0.0] + allowed_sorted + [total_duration]
+    point_count = len(points)
+
+    # dp[parts_used][point_index] = 最小コスト
+    dp: list[list[float]] = [[math.inf] * point_count for _ in range(part_count + 1)]
+    prev: list[list[int | None]] = [[None] * point_count for _ in range(part_count + 1)]
+
+    for i in range(1, point_count):
+        length = points[i] - points[0]
+        dp[1][i] = abs(length - target_length)
+        prev[1][i] = 0
+
+    for parts_used in range(2, part_count + 1):
+        for i in range(parts_used - 1, point_count):
+            for j in range(parts_used - 2, i):
+                if math.isinf(dp[parts_used - 1][j]):
+                    continue
+                length = points[i] - points[j]
+                if length <= 0:
+                    continue
+                cost = dp[parts_used - 1][j] + abs(length - target_length)
+                if cost < dp[parts_used][i]:
+                    dp[parts_used][i] = cost
+                    prev[parts_used][i] = j
+
     boundaries: list[float] = []
-    remaining = list(allowed)
-    last = 0.0
+    current_index = point_count - 1
+    parts_used = part_count
 
-    if desired_part_count <= 1:
-        return boundaries
+    if math.isinf(dp[parts_used][current_index]):
+        return []
 
-    for idx in range(1, desired_part_count):
-        if not remaining:
+    while parts_used > 1:
+        prev_index = prev[parts_used][current_index]
+        if prev_index is None:
             break
+        boundaries.append(points[prev_index])
+        current_index = prev_index
+        parts_used -= 1
 
-        target = total_duration * idx / desired_part_count
-        candidates = [b for b in remaining if last < b < total_duration]
-        if not candidates:
-            break
-
-        next_boundary = min(candidates, key=lambda b: abs(b - target))
-        boundaries.append(next_boundary)
-        last = next_boundary
-        remaining = [b for b in remaining if b > next_boundary]
-
-    return boundaries
+    return list(reversed(boundaries))
 
 
 def _slice_segments_for_part(
@@ -1274,6 +1308,7 @@ def _plan_video_parts(
         desired_boundaries = _suggest_video_boundaries_with_llm(
             subtitle_segments,
             total_duration=video_duration,
+            desired_part_count=target_part_count,
             config=config,
             run_dir=run_dir,
             reporter=reporter,
@@ -1282,19 +1317,23 @@ def _plan_video_parts(
     else:
         reporter.log("LLM が指定されていないため、等分ベースで動画を分割します。")
 
+    selected: list[float] = []
     if desired_boundaries:
         snapped = _snap_boundaries_to_segments(desired_boundaries, allowed_boundaries, video_duration)
-    else:
-        snapped = []
+        selected = _calc_even_boundaries(
+            snapped,
+            total_duration=video_duration,
+            desired_part_count=target_part_count,
+        )
 
-    if not snapped:
-        snapped = _calc_even_boundaries(
+    if not selected:
+        selected = _calc_even_boundaries(
             allowed_boundaries,
             total_duration=video_duration,
             desired_part_count=target_part_count,
         )
 
-    finalized = _fill_long_gaps(snapped, allowed_boundaries, video_duration)
+    finalized = _fill_long_gaps(selected, allowed_boundaries, video_duration)
     desired_boundary_count = max(0, target_part_count - 1)
     if len(finalized) != desired_boundary_count:
         finalized = _calc_even_boundaries(
