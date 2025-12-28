@@ -396,6 +396,20 @@ def _load_placements(path: pathlib.Path) -> list[tuple[float, float]]:
     return [(float(item.get("start", 0.0)), float(item.get("end", 0.0))) for item in data]
 
 
+def _write_cli_args_snapshot(run_dir: pathlib.Path, cli_args: list[str] | None) -> None:
+    if cli_args is None:
+        return
+    metadata_path = run_dir / "metadata.json"
+    try:
+        existing = json.loads(metadata_path.read_text(encoding="utf-8")) if metadata_path.exists() else {}
+    except json.JSONDecodeError:
+        existing = {}
+
+    existing["cli_args"] = list(cli_args)
+    existing.setdefault("run_id", run_dir.name)
+    metadata_path.write_text(json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def _write_run_metadata(state: "PipelineState") -> None:
     metadata = {
         "run_id": state.run_id,
@@ -404,6 +418,7 @@ def _write_run_metadata(state: "PipelineState") -> None:
         "speaker2": state.config.speaker2,
         "color1": state.config.color1,
         "color2": state.config.color2,
+        "cli_args": state.config.cli_args,
         "subtitle_max_chars": state.config.subtitle_max_chars,
         "subtitle_font": state.config.subtitle_font,
         "subtitle_font_size": state.config.subtitle_font_size,
@@ -1149,6 +1164,8 @@ def run_pipeline(config: PipelineConfig) -> None:
         reporter.log(f"run_id {run_id} で再開します。")
     else:
         run_dir.mkdir(parents=True, exist_ok=True)
+
+    _write_cli_args_snapshot(run_dir, config.cli_args)
 
     env_pyannote_token = os.environ.get("PYANNOTE_TOKEN")
     hf_token, _ = resolve_hf_token(env_pyannote_token)
