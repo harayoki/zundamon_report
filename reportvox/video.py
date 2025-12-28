@@ -9,6 +9,7 @@ from typing import Iterable, Sequence
 
 from PIL import Image
 
+from . import audio as audio_utils
 from .envinfo import EnvironmentInfo, append_env_details
 
 
@@ -81,6 +82,8 @@ def render_video_with_subtitles(
         raise FileNotFoundError(append_env_details(f"音声ファイルが見つかりません: {audio}", env_info))
     if not subtitles.exists():
         raise FileNotFoundError(append_env_details(f"字幕ファイルが見つかりません: {subtitles}", env_info))
+
+    video_duration = audio_utils.read_wav_duration(audio)
 
     overlay_list = list(overlays or [])
     if overlay_list and image_scale <= 0:
@@ -194,7 +197,6 @@ def render_video_with_subtitles(
             "-c:a",
             "pcm_s16le",
             "-shortest",
-            str(output),
         ]
     else:
         cmd += [
@@ -209,22 +211,62 @@ def render_video_with_subtitles(
             "-movflags",
             "+faststart",
             "-shortest",
-            str(output),
         ]
+    cmd += ["-progress", "pipe:1", "-nostats", "-loglevel", "error", str(output)]
     print(" ".join(cmd))
+
+    total_ms = max(1, int(video_duration * 1000))
+    last_percent: float | None = None
+    printed_progress = False
+
+    process = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        bufsize=1,
+    )
+
     try:
-        subprocess.run(
-            cmd,
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            text=True,
-            encoding="utf-8",
-        )
-    except subprocess.CalledProcessError as exc:
-        error_output = exc.stderr or ""
+        assert process.stdout is not None
+        for line in process.stdout:
+            line = line.strip()
+            if not line or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            if key == "out_time_ms":
+                try:
+                    current_ms = int(value)
+                except ValueError:
+                    continue
+                percent = min(current_ms / total_ms * 100, 100)
+                if last_percent is None or percent - last_percent >= 0.5:
+                    seconds = current_ms / 1000
+                    print(
+                        f"[ffmpeg] 動画生成進捗: {percent:5.1f}% ({seconds:.1f}/{video_duration:.1f}s)",
+                        end="\r",
+                        flush=True,
+                    )
+                    printed_progress = True
+                    last_percent = percent
+            elif key == "progress" and value == "end":
+                print(
+                    f"[ffmpeg] 動画生成進捗: 100.0% ({video_duration:.1f}/{video_duration:.1f}s)",
+                    end="\r",
+                    flush=True,
+                )
+                printed_progress = True
+    finally:
+        stderr_output = process.stderr.read() if process.stderr else ""
+        return_code = process.wait()
+        if printed_progress:
+            print()
+
+    if return_code != 0:
+        error_output = stderr_output or ""
         message = f"ffmpeg による動画生成に失敗しました。ffmpegからのエラー:\n{error_output}"
-        raise RuntimeError(append_env_details(message, env_info)) from exc
+        raise RuntimeError(append_env_details(message, env_info))
 
 
 # def remux_subtitle_tracks(
