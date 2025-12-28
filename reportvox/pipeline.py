@@ -369,7 +369,7 @@ def _llm_review_transcription(
         fromfile="before_llm_review.txt",
         tofile="after_llm_review.txt",
     )
-    diff_log_path = run_dir / "llm_review_diff.log"
+    diff_log_path = run_dir / "diff_llm_review.log"
     diff_log_path.write_text("".join(diff), encoding="utf-8")
 
     return reviewed_result
@@ -920,7 +920,7 @@ def _step_stylize(state: PipelineState) -> None:
             prompt_logger=linebreak_prompt_logger,
         )
         _save_stylized(stylized, stylized_path)
-        _log_style_diff(mapped, stylized, run_dir / "style_diff.log")
+        _log_style_diff(mapped, stylized, run_dir / "diff_style.log")
         reporter.log("口調変換が完了し保存しました。")
     state.complete_step("口調変換工程が完了しました。", step_start)
     state.stylized_segments = stylized
