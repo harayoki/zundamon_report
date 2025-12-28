@@ -191,7 +191,11 @@ def _llm_transform(
         if response_logger:
             response_logger(content)
         # 応答が空行を含む場合があるので、空行は除去する
-        return [line for line in content.splitlines() if line.strip()]
+        lines = [line for line in content.splitlines() if line.strip()]
+        # LLM が改行を挿入しても、1つのセグメントとして扱う
+        if len(lines) > 1:
+            return ["\n".join(lines)]
+        return lines or [text]
     except Exception as exc:
         if response_logger:
             response_logger(exc)
