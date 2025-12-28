@@ -1031,13 +1031,17 @@ def _step_finalize(state: PipelineState) -> None:
     subtitle_segments_for_video: list[style_convert.StylizedSegment] | None = None
     max_chars = config.subtitle_max_chars
 
-    if config.subtitle_mode != "off" or need_video:
+    want_subtitle_files = config.subtitle_mode != "off"
+
+    if want_subtitle_files or need_video:
         base_subtitle_segments = subtitles.align_segments_to_audio(
             state.stylized_segments, state.synthesized_paths, placements=state.placements
         )
-        if config.subtitle_mode != "off":
+        if want_subtitle_files:
             subtitle_segments_for_files = base_subtitle_segments
         if need_video:
+            # 動画に焼き込む字幕は常にキャラクター別のトラックを使う
+            # （--subtitles の指定は out/ へ保存する SRT のみを制御）。
             subtitle_segments_for_video = subtitles.merge_subtitle_segments(base_subtitle_segments)
 
     if config.subtitle_mode != "off" and subtitle_segments_for_files is not None:
