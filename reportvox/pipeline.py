@@ -1593,6 +1593,21 @@ def _insert_line_breaks(
         lines = [line.strip() for line in new_text.splitlines()]
         lines = [line for line in lines if line]
 
+        wrapped_lines: list[str] = []
+        for line in lines:
+            if len(line) <= config.linebreak_min_chars:
+                wrapped_lines.append(line)
+                continue
+
+            start = 0
+            while start < len(line):
+                end = min(start + config.linebreak_min_chars, len(line))
+                wrapped_lines.append(line[start:end])
+                start = end
+
+        if wrapped_lines:
+            lines = wrapped_lines
+
         if not lines:
             lines = [seg.text]
 
