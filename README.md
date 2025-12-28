@@ -177,6 +177,7 @@ python -m reportvox input.wav -f
 # 字幕 (SRT) の出力設定（デフォルトで2話者を1つにまとめたSRTを out/ に保存）
 python -m reportvox input.wav --subtitles off    # SRT を出力しない
 python -m reportvox input.wav --subtitles split  # 話者ごとに別ファイルを追加で出力
+# 動画へ焼き込む字幕は常にキャラクター別レイアウトで生成され、--subtitles は out/ に保存する SRT の形式だけを切り替えます。
 
 # 字幕付きの動画 (mp4/mov) を出力
 python -m reportvox input.wav --mp4  # mp4 を生成
