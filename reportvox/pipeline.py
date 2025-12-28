@@ -120,7 +120,7 @@ def _slugify_for_cache(path: pathlib.Path) -> str:
     return f"{safe}_{digest}"
 
 
-_VIDEO_PART_LIMIT = 179.0
+_VIDEO_PART_LIMIT = 180.0
 
 
 def _create_prompt_logger(path: pathlib.Path, title: str) -> style_convert.LLMPromptLogger:
@@ -1161,17 +1161,25 @@ def _fill_long_gaps(boundaries: list[float], allowed: list[float], total_duratio
     return completed
 
 
-def _calc_even_boundaries(allowed: list[float], total_duration: float) -> list[float]:
+def _calc_even_boundaries(
+    allowed: list[float], total_duration: float, desired_part_count: int
+) -> list[float]:
     boundaries: list[float] = []
     remaining = list(allowed)
     last = 0.0
 
-    while total_duration - last > _VIDEO_PART_LIMIT and remaining:
-        upper = min(total_duration, last + _VIDEO_PART_LIMIT)
-        candidates = [b for b in remaining if last < b <= upper]
+    if desired_part_count <= 1:
+        return boundaries
+
+    for idx in range(1, desired_part_count):
+        if not remaining:
+            break
+
+        target = total_duration * idx / desired_part_count
+        candidates = [b for b in remaining if last < b < total_duration]
         if not candidates:
             break
-        target = last + min(_VIDEO_PART_LIMIT, (total_duration - last) / math.ceil((total_duration - last) / _VIDEO_PART_LIMIT))
+
         next_boundary = min(candidates, key=lambda b: abs(b - target))
         boundaries.append(next_boundary)
         last = next_boundary
@@ -1222,6 +1230,8 @@ def _plan_video_parts(
     reporter: _ProgressReporter,
     env_info: EnvironmentInfo,
 ) -> list[VideoPartPlan]:
+    target_part_count = max(1, math.ceil(video_duration / _VIDEO_PART_LIMIT))
+
     if not config.video_split:
         if video_duration > _VIDEO_PART_LIMIT:
             reporter.log("動画分割オプションが無効のため、1 本の動画として出力します。")
@@ -1278,11 +1288,20 @@ def _plan_video_parts(
         snapped = []
 
     if not snapped:
-        snapped = _calc_even_boundaries(allowed_boundaries, video_duration)
+        snapped = _calc_even_boundaries(
+            allowed_boundaries,
+            total_duration=video_duration,
+            desired_part_count=target_part_count,
+        )
 
     finalized = _fill_long_gaps(snapped, allowed_boundaries, video_duration)
-    if not finalized and video_duration > _VIDEO_PART_LIMIT:
-        finalized = _calc_even_boundaries(allowed_boundaries, video_duration)
+    desired_boundary_count = max(0, target_part_count - 1)
+    if len(finalized) != desired_boundary_count:
+        finalized = _calc_even_boundaries(
+            allowed_boundaries,
+            total_duration=video_duration,
+            desired_part_count=target_part_count,
+        )
 
     starts = [0.0] + finalized
     ends = finalized + [video_duration]
