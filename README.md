@@ -211,6 +211,18 @@ python -m reportvox input.mp4 --speakers auto --mp3
 - --ollama-model: Ollamaで使用するモデル名。デフォルトは環境変数 LOCAL_LLM_MODEL または 'llama3'。
 - --mp3: mp3 を生成（out/ には mp3 だけを出力）。
 - --bitrate: mp3 出力時のビットレート。
+- --output-name: 出力ファイル名のベース（拡張子不要）。mp3/字幕にも同名を適用。
+- --ffmpeg-path: ffmpeg 実行ファイルへのパス。
+- -f, --force: 出力の上書き確認をスキップ。
+- --force-transcribe: 文字起こしキャッシュを無視して Whisper による文字起こしをやり直します。
+- --resume <run_id>: 中断した工程から再開。
+- --resume-from: --resume と併用し、指定したステップから再開。
+- --keep-work: work/<run_id> を削除せず保持（開発/再出力向け）。
+- --review-transcript: 文字起こし結果を保存したあとで処理を停止し、transcript.json を手動修正したうえで表示される再開コマンドを実行して続行できるようにする。
+- --review-transcript-llm: 文字起こし結果を保存したあと、LLM で明らかな誤字脱字を自動校正してから続行する（--llm でバックエンド指定）。
+- --skip-review-transcript: 誤字脱字の自動校正を行わずに次の工程へ進みます。
+
+## 動画書き出しオプション
 - --mp4: 字幕入りの mp4 を生成。
 - --mov: 字幕入り・透明背景の mov (ProRes 4444) を生成。
 - --video-width / --video-height: 動画の解像度をピクセルで指定（デフォルト 1080x1920）。
@@ -223,16 +235,6 @@ python -m reportvox input.mp4 --speakers auto --mp3
 - --subtitle-max-chars: 字幕1枚あたりの最大文字数（デフォルト 25、0 で無制限）。
 - --subtitle-font: 動画用ASS字幕に使用するフォント名（libass で解決可能なもの）。
 - --subtitle-font-size: 動画用ASS字幕のフォントサイズ。デフォルトは 96 pt。
-- --output-name: 出力ファイル名のベース（拡張子不要）。mp3/字幕にも同名を適用。
-- --ffmpeg-path: ffmpeg 実行ファイルへのパス。
-- -f, --force: 出力の上書き確認をスキップ。
-- --force-transcribe: 文字起こしキャッシュを無視して Whisper による文字起こしをやり直します。
-- --resume <run_id>: 中断した工程から再開。
-- --resume-from: --resume と併用し、指定したステップから再開。
-- --keep-work: work/<run_id> を削除せず保持（開発/再出力向け）。
-- --review-transcript: 文字起こし結果を保存したあとで処理を停止し、transcript.json を手動修正したうえで表示される再開コマンドを実行して続行できるようにする。
-- --review-transcript-llm: 文字起こし結果を保存したあと、LLM で明らかな誤字脱字を自動校正してから続行する（--llm でバックエンド指定）。
-- --skip-review-transcript: 誤字脱字の自動校正を行わずに次の工程へ進みます。
 
 ## カスタム話者・口癖の追加
 新しいキャラクターの追加や口癖の調整方法は「[キャラクター追加・口癖設定ガイド](docs/characters.md)」にまとめています。
