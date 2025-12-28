@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import functools
 import math
 import pathlib
 import subprocess
-from typing import Iterable, Sequence
+from dataclasses import dataclass
+from typing import Callable, Iterable, Sequence
 
 from PIL import Image
 
@@ -16,6 +18,82 @@ from .envinfo import EnvironmentInfo, append_env_details
 def _escape_filter_path(path: pathlib.Path) -> str:
     escaped = path.as_posix().replace("\\", r"\\").replace(":", r"\\:").replace(",", r"\\,")
     return escaped.replace("'", r"\'")
+
+
+@dataclass(frozen=True)
+class OverlayLayout:
+    path: pathlib.Path
+    start: float
+    end: float
+    x: int
+    y: int
+    width: int
+    height: int
+    scale: float
+    source_width: int
+    source_height: int
+
+
+@functools.lru_cache(maxsize=None)
+def _load_image_size(path: pathlib.Path) -> tuple[int, int]:
+    with Image.open(path) as img:
+        return img.size
+
+
+def compute_overlay_layouts(
+    overlays: Sequence[tuple[pathlib.Path, float, float]],
+    *,
+    video_width: int,
+    video_height: int,
+    image_scale: float,
+    image_position: tuple[int, int] | None,
+    image_size_lookup: Callable[[pathlib.Path], tuple[int, int]] | None = None,
+) -> list[OverlayLayout]:
+    """画像配置の具体的な位置・サイズを計算する。"""
+
+    if not overlays:
+        return []
+
+    size_lookup = image_size_lookup or _load_image_size
+    vertical_offset_px = 10
+    margin_top_px = 8
+    auto_position = image_position is None
+
+    layouts: list[OverlayLayout] = []
+    for path, start, end in overlays:
+        src_w, src_h = size_lookup(path)
+        if auto_position:
+            base_height = src_h * image_scale
+            target_bottom = video_height * 0.58 + base_height / 2
+            target_height = max(base_height, target_bottom - margin_top_px)
+            scale_factor = target_height / src_h
+
+            scaled_w = math.ceil(src_w * scale_factor)
+            scaled_h = math.ceil(src_h * scale_factor)
+            x_pos = (video_width - scaled_w) / 2
+            y_pos = target_bottom - scaled_h + vertical_offset_px
+        else:
+            scale_factor = image_scale
+            scaled_w = math.ceil(src_w * scale_factor)
+            scaled_h = math.ceil(src_h * scale_factor)
+            x_pos, y_pos = image_position
+
+        layouts.append(
+            OverlayLayout(
+                path=path,
+                start=start,
+                end=end,
+                x=math.floor(x_pos),
+                y=math.floor(y_pos),
+                width=scaled_w,
+                height=scaled_h,
+                scale=scale_factor,
+                source_width=src_w,
+                source_height=src_h,
+            )
+        )
+
+    return layouts
 
 
 def build_image_overlays(
@@ -96,54 +174,32 @@ def render_video_with_subtitles(
 
     base_color = "black@0" if transparent else "black"
     x_expr = str(image_position[0]) if image_position else "(W-w)/2"
-    vertical_offset_px = 10
-    y_expr = (
-        str(image_position[1])
-        if image_position
-        else f"H*0.58 - h/2 + {vertical_offset_px}"
+    y_expr = str(image_position[1]) if image_position else f"H*0.58 - h/2 + 10"
+
+    overlay_layouts = compute_overlay_layouts(
+        overlay_list,
+        video_width=width,
+        video_height=height,
+        image_scale=image_scale,
+        image_position=image_position,
     )
-
-    overlay_transforms: list[dict[str, float]] = []
-    if overlay_list and image_position is None:
-        margin_top_px = 8
-        for path, *_ in overlay_list:
-            with Image.open(path) as img:
-                src_w, src_h = img.size
-
-            base_height = src_h * image_scale
-            target_bottom = height * 0.58 + base_height / 2
-            target_height = max(base_height, target_bottom - margin_top_px)
-            scale_factor = target_height / src_h
-
-            scaled_w = math.ceil(src_w * scale_factor)
-            scaled_h = math.ceil(src_h * scale_factor)
-            x_pos = (width - scaled_w) / 2
-            y_pos = target_bottom - scaled_h + vertical_offset_px
-
-            overlay_transforms.append(
-                {
-                    "scale_w": scaled_w,
-                    "scale_h": scaled_h,
-                    "x": x_pos,
-                    "y": y_pos,
-                }
-            )
 
     filter_parts: list[str] = []
     last_stream = "[0:v]"
     for idx, (path, start, end) in enumerate(overlay_list):
+        layout = overlay_layouts[idx] if overlay_layouts else None
         input_label = f"[{idx + 2}:v]"
         scaled_label = input_label
         overlay_x_expr = x_expr
         overlay_y_expr = y_expr
-        if overlay_transforms:
-            transform = overlay_transforms[idx]
-            scaled_label = f"[img{idx}]"
-            overlay_x_expr = str(math.floor(transform["x"]))
-            overlay_y_expr = str(math.floor(transform["y"]))
-            filter_parts.append(
-                f"{input_label}scale={transform['scale_w']}:{transform['scale_h']}[img{idx}]"
-            )
+        if layout is not None:
+            overlay_x_expr = str(layout.x)
+            overlay_y_expr = str(layout.y)
+            if layout.width != layout.source_width or layout.height != layout.source_height:
+                filter_parts.append(
+                    f"{input_label}scale={layout.width}:{layout.height}[img{idx}]"
+                )
+                scaled_label = f"[img{idx}]"
         elif image_scale != 1.0:
             filter_parts.append(
                 f"{input_label}scale=ceil(iw*{image_scale}):ceil(ih*{image_scale})[img{idx}]"
