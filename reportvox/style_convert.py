@@ -24,10 +24,20 @@ class StylizedSegment:
     character: str
 
 
+def _sanitize_subtitle_text(text: str) -> str:
+    """字幕用のテキストを事前に正規化する。"""
+
+    return text.replace("、", " ").replace("。", "")
+
+
 def _heuristic_phrases(
-    segment: AlignedSegment, meta: CharacterMeta, inserted: set[str]
+    segment: AlignedSegment,
+    meta: CharacterMeta,
+    inserted: set[str],
+    *,
+    text_override: str | None = None,
 ) -> list[str]:
-    text = segment.text
+    text = text_override if text_override is not None else segment.text
     character_id = segment.character or meta.id
     if character_id in inserted:
         return [text]
@@ -222,7 +232,7 @@ def apply_style(
             indexes = [idx for idx, seg in enumerate(segments) if (seg.character or char1.id) == character_id]
             if not indexes:
                 continue
-            texts = [segments[idx].text for idx in indexes]
+            texts = [_sanitize_subtitle_text(segments[idx].text) for idx in indexes]
             transformed = _llm_transform_batch(texts, meta, config, prompt_logger=prompt_logger)
             if transformed is None:
                 continue
@@ -231,15 +241,16 @@ def apply_style(
 
     for idx, seg in enumerate(segments):
         meta = char_map.get(seg.character or char1.id, char1)
+        sanitized_text = _sanitize_subtitle_text(seg.text)
 
         # LLM変換とヒューリスティックな口癖挿入を適用
         if use_batch_llm:
-            texts = llm_results.get(idx, [seg.text])
+            texts = llm_results.get(idx, [sanitized_text])
         else:
-            texts = _llm_transform(seg.text, meta, config, prompt_logger=prompt_logger)
+            texts = _llm_transform(sanitized_text, meta, config, prompt_logger=prompt_logger)
         if len(texts) == 1:
             # LLMが分割しなかった場合は、ヒューリスティックな口癖挿入を試みる
-            texts = _heuristic_phrases(seg, meta, inserted)
+            texts = _heuristic_phrases(seg, meta, inserted, text_override=texts[0])
 
         # 分割されたセグメントを生成
         if len(texts) == 1:
