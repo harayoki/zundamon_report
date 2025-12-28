@@ -12,6 +12,9 @@ from .diarize import AlignedSegment
 from .llm_client import chat_completion
 
 
+LLMPromptLogger = Callable[[str, str], Callable[[str | Exception], None] | None]
+
+
 @dataclass
 class StylizedSegment:
     start: float
@@ -62,7 +65,7 @@ def _llm_transform_batch(
     meta: CharacterMeta,
     config: PipelineConfig,
     *,
-    prompt_logger: Callable[[str, str], None] | None = None,
+    prompt_logger: LLMPromptLogger | None = None,
 ) -> list[list[str]] | None:
     if not config.style_with_llm:
         return None
@@ -92,12 +95,15 @@ def _llm_transform_batch(
         + "\n".join(texts)
     )
 
-    if prompt_logger:
-        prompt_logger(system_prompt, user_prompt)
+    response_logger = prompt_logger(system_prompt, user_prompt) if prompt_logger else None
 
     try:
         content = chat_completion(system_prompt=system_prompt, user_prompt=user_prompt, config=config)
-    except Exception:
+        if response_logger:
+            response_logger(content)
+    except Exception as exc:
+        if response_logger:
+            response_logger(exc)
         return None
 
     lines = [line.strip() for line in content.splitlines() if line.strip()]
@@ -112,7 +118,7 @@ def _llm_transform(
     meta: CharacterMeta,
     config: PipelineConfig,
     *,
-    prompt_logger: Callable[[str, str], None] | None = None,
+    prompt_logger: LLMPromptLogger | None = None,
 ) -> list[str]:
     if not config.style_with_llm:
         return [text]
@@ -137,13 +143,16 @@ def _llm_transform(
         f"口癖: {', '.join(meta.phrases.get('default', []))}\n"
         f"文章: {text}"
     )
-    if prompt_logger:
-        prompt_logger(system_prompt, user_prompt)
+    response_logger = prompt_logger(system_prompt, user_prompt) if prompt_logger else None
     try:
         content = chat_completion(system_prompt=system_prompt, user_prompt=user_prompt, config=config)
+        if response_logger:
+            response_logger(content)
         # 応答が空行を含む場合があるので、空行は除去する
         return [line for line in content.splitlines() if line.strip()]
-    except Exception:
+    except Exception as exc:
+        if response_logger:
+            response_logger(exc)
         # LLM が利用できない場合は元のテキストを返して処理継続
         return [text]
 
@@ -154,7 +163,7 @@ def apply_style(
     char2: CharacterMeta,
     config: PipelineConfig,
     *,
-    prompt_logger: Callable[[str, str], None] | None = None,
+    prompt_logger: LLMPromptLogger | None = None,
 ) -> list[StylizedSegment]:
     stylized: list[StylizedSegment] = []
     inserted: set[str] = set()

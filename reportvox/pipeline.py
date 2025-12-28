@@ -115,6 +115,30 @@ def _slugify_for_cache(path: pathlib.Path) -> str:
     return f"{safe}_{digest}"
 
 
+def _create_prompt_logger(path: pathlib.Path, title: str) -> style_convert.LLMPromptLogger:
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    def log_prompt(system_prompt: str, user_prompt: str) -> Callable[[str | Exception], None]:
+        with path.open("a", encoding="utf-8") as fp:
+            fp.write(f"=== {title} ===\n")
+            fp.write("[System]\n")
+            fp.write(system_prompt.strip() + "\n\n")
+            fp.write("[User]\n")
+            fp.write(user_prompt.strip() + "\n\n")
+
+        def log_response(response: str | Exception) -> None:
+            with path.open("a", encoding="utf-8") as fp:
+                fp.write("[Response]\n")
+                if isinstance(response, Exception):
+                    fp.write(f"[ERROR] {type(response).__name__}: {response}\n\n")
+                else:
+                    fp.write(str(response).strip() + "\n\n")
+
+        return log_response
+
+    return log_prompt
+
+
 def _resolve_transcription_cache_path(config: PipelineConfig, out_dir: pathlib.Path) -> pathlib.Path | None:
     if config.input_audio is None:
         return None
@@ -303,18 +327,18 @@ def _llm_review_transcription(
     )
 
     if prompt_log_path is None:
-        prompt_log_path = run_dir / "transcript_review_llm_prompt.txt"
+        prompt_log_path = run_dir / "prompt_transcript_review_llm.txt"
 
-    prompt_content = (
-        "=== Transcript Review LLM Prompt ===\n"
-        "[System]\n"
-        f"{system_prompt.strip()}\n\n"
-        "[User]\n"
-        f"{user_prompt.strip()}\n"
-    )
-    prompt_log_path.write_text(prompt_content, encoding="utf-8")
+    prompt_log_path.write_text("", encoding="utf-8")
+    log_prompt = _create_prompt_logger(prompt_log_path, "Transcript Review LLM Prompt")
+    log_response = log_prompt(system_prompt, user_prompt)
 
-    content = chat_completion(system_prompt=system_prompt, user_prompt=user_prompt, config=config, env_info=env_info)
+    try:
+        content = chat_completion(system_prompt=system_prompt, user_prompt=user_prompt, config=config, env_info=env_info)
+        log_response(content)
+    except Exception as exc:
+        log_response(exc)
+        raise
     try:
         data = json.loads(content)
     except json.JSONDecodeError as exc:
@@ -743,7 +767,7 @@ def _step_transcribe(state: PipelineState) -> None:
                 reporter.log("LLM バックエンドが指定されていないため、誤字脱字の自動校正をスキップします (--llm で設定可能)。")
             else:
                 reporter.log("LLM で文字起こしを校正しています...")
-                prompt_log_path = run_dir / "transcript_review_llm_prompt.txt"
+                prompt_log_path = run_dir / "prompt_transcript_review_llm.txt"
                 try:
                     whisper_result = _llm_review_transcription(
                         whisper_result,
@@ -864,20 +888,12 @@ def _step_stylize(state: PipelineState) -> None:
     else:
         reporter.log("口調変換と定型句の挿入を実行しています...")
         prompt_logger = None
-        prompt_log_path = run_dir / "style_llm_prompts.log"
+        prompt_log_path = run_dir / "prompt_style_llm.log"
         if config.style_with_llm and config.llm_backend not in {"none", "gemini"}:
             prompt_log_path.write_text("", encoding="utf-8")
             reporter.log(f"口調変換用LLMプロンプトを {prompt_log_path.name} に記録します。")
 
-            def _log_style_prompt(system_prompt: str, user_prompt: str) -> None:
-                with prompt_log_path.open("a", encoding="utf-8") as fp:
-                    fp.write("=== Style LLM Prompt ===\n")
-                    fp.write("[System]\n")
-                    fp.write(system_prompt.strip() + "\n\n")
-                    fp.write("[User]\n")
-                    fp.write(user_prompt.strip() + "\n\n")
-
-            prompt_logger = _log_style_prompt
+            prompt_logger = _create_prompt_logger(prompt_log_path, "Style LLM Prompt")
 
         stylized = style_convert.apply_style(mapped, char1, char2, config=config, prompt_logger=prompt_logger)
         stylized = _prepend_introductions(
@@ -891,20 +907,12 @@ def _step_stylize(state: PipelineState) -> None:
             run_dir=run_dir,
         )
         linebreak_prompt_logger = None
-        linebreak_prompt_path = run_dir / "line_break_llm_prompts.log"
+        linebreak_prompt_path = run_dir / "prompt_line_break_llm.log"
         if config.linebreak_with_llm and config.llm_backend != "none":
             linebreak_prompt_path.write_text("", encoding="utf-8")
             reporter.log(f"改行調整用LLMプロンプトを {linebreak_prompt_path.name} に記録します。")
 
-            def _log_linebreak_prompt(system_prompt: str, user_prompt: str) -> None:
-                with linebreak_prompt_path.open("a", encoding="utf-8") as fp:
-                    fp.write("=== Line Break LLM Prompt ===\n")
-                    fp.write("[System]\n")
-                    fp.write(system_prompt.strip() + "\n\n")
-                    fp.write("[User]\n")
-                    fp.write(user_prompt.strip() + "\n\n")
-
-            linebreak_prompt_logger = _log_linebreak_prompt
+            linebreak_prompt_logger = _create_prompt_logger(linebreak_prompt_path, "Line Break LLM Prompt")
 
         stylized = _insert_line_breaks(
             stylized,
@@ -1307,18 +1315,14 @@ def _decide_zunda_jobs(
     )
 
     prompt_log_path: pathlib.Path | None = None
-    response_log_path: pathlib.Path | None = None
+    log_response: Callable[[str | Exception], None] | None = None
     if prompt_log_dir is not None:
-        prompt_log_path = prompt_log_dir / "zunda_jobs_prompt.txt"
-        response_log_path = prompt_log_dir / "zunda_jobs_response.txt"
-        prompt_content = (
-            "[System]\n"
-            f"{system_prompt.strip()}\n\n"
-            "[User]\n"
-            f"{user_prompt.strip()}\n"
-        )
-        prompt_log_path.write_text(prompt_content, encoding="utf-8")
+        prompt_log_path = prompt_log_dir / "prompt_zunda_jobs.txt"
+        prompt_log_path.write_text("", encoding="utf-8")
+        prompt_logger = _create_prompt_logger(prompt_log_path, "Zunda Jobs Prompt")
+        log_response = prompt_logger(system_prompt, user_prompt)
 
+    content = ""
     try:
         content = chat_completion(
             system_prompt=system_prompt,
@@ -1326,21 +1330,24 @@ def _decide_zunda_jobs(
             config=config,
             env_info=env_info,
         )
+        if log_response:
+            log_response(content)
         payload = _extract_json_payload(content)
         data = json.loads(payload)
         senior_job = str(data.get("zunda_senior_job", "")).strip()
         junior_job = str(data.get("zunda_junior_job", "")).strip()
     except json.JSONDecodeError as exc:
+        if log_response:
+            log_response(exc)
         reporter.log(f"ずんだもんの職業応答を JSON として解釈できませんでした: {exc}")
         preview = (content or "").strip()
         if preview:
             preview = preview[:200].replace("\n", " ")
             reporter.log(f"LLM 応答の先頭部分: {preview}")
-        if response_log_path is not None and content is not None:
-            response_log_path.write_text(content, encoding="utf-8")
-            reporter.log(f"LLM 応答全文を {response_log_path.name} に保存しました。")
         return None
     except Exception as exc:
+        if log_response:
+            log_response(exc)
         reporter.log(f"ずんだもんの職業生成に失敗したため、省略します: {exc}")
         return None
 
@@ -1432,7 +1439,7 @@ def _insert_line_breaks(
     segments: Sequence[style_convert.StylizedSegment],
     *,
     config: PipelineConfig,
-    prompt_logger: Callable[[str, str], None] | None = None,
+    prompt_logger: style_convert.LLMPromptLogger | None = None,
 ) -> list[style_convert.StylizedSegment]:
     if not config.linebreak_with_llm or config.llm_backend == "none":
         return list(segments)
@@ -1469,14 +1476,17 @@ def _insert_line_breaks(
 
     user_prompt = "\n".join(lines)
 
-    if prompt_logger:
-        prompt_logger(system_prompt, user_prompt)
+    response_logger = prompt_logger(system_prompt, user_prompt) if prompt_logger else None
 
     response_map: dict[int, str] = {}
 
     try:
         content = chat_completion(system_prompt=system_prompt, user_prompt=user_prompt, config=config)
-    except Exception:
+        if response_logger:
+            response_logger(content)
+    except Exception as exc:
+        if response_logger:
+            response_logger(exc)
         content = ""
 
     if content and re.search(r"\\{1,2}N", content):
