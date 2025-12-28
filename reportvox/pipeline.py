@@ -344,7 +344,8 @@ def _llm_review_transcription(
         log_response(exc)
         raise
     try:
-        data = json.loads(content)
+        payload = _extract_json_payload(content)
+        data = json.loads(payload)
     except json.JSONDecodeError as exc:
         raise RuntimeError(append_env_details("LLM の応答を JSON として読み取れませんでした。", env_info)) from exc
 
