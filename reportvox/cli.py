@@ -286,6 +286,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="長いセリフに自然な改行を入れる LLM 処理を無効化します。",
     )
     parser.add_argument(
+        "--linebreak-split-segments",
+        action="store_true",
+        dest="linebreak_split_segments",
+        default=False,
+        help="LLM が提案した改行にあわせてセグメントも分割します（デフォルトはセグメントを分割せず改行のみ適用）。",
+    )
+    parser.add_argument(
         "--linebreak-min-chars",
         type=_positive_int,
         default=16,
@@ -383,6 +390,7 @@ def parse_args(argv: Sequence[str] | None = None) -> PipelineConfig:
         review_transcript=review_mode,
         style_with_llm=args.style_with_llm,
         linebreak_with_llm=args.linebreak_with_llm,
+        linebreak_split_segments=args.linebreak_split_segments,
         linebreak_min_chars=args.linebreak_min_chars,
         kana_level=args.kana_level,
         diarization_threshold=args.diarization_threshold,

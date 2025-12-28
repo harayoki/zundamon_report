@@ -1596,12 +1596,13 @@ def _insert_line_breaks(
         if not lines:
             lines = [seg.text]
 
-        if len(lines) == 1:
+        if len(lines) == 1 or not config.linebreak_split_segments:
+            text = "\n".join(lines)
             adjusted.append(
                 style_convert.StylizedSegment(
                     start=seg.start,
                     end=seg.end,
-                    text=lines[0],
+                    text=text,
                     speaker=seg.speaker,
                     character=seg.character,
                 )
