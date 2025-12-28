@@ -111,27 +111,6 @@ def merge_subtitle_segments(segments: Sequence[StylizedSegment]) -> list[Stylize
     return sorted(merged, key=lambda s: (s.start, s.end))
 
 
-def write_merged_srt_for_video(
-    segments: Sequence[StylizedSegment],
-    *,
-    path: pathlib.Path,
-    characters: Dict[str, CharacterMeta],
-    max_chars_per_line: int | None = None,
-) -> pathlib.Path:
-    """動画生成前に統合した字幕を SRT で書き出す。"""
-
-    exploded = _explode_segments(
-        segments,
-        characters,
-        include_label=True,
-        max_chars=max_chars_per_line,
-    )
-    sorted_segments = sorted(exploded, key=lambda s: (s.start, s.end))
-    path.parent.mkdir(exist_ok=True)
-    _write_srt(sorted_segments, path)
-    return path
-
-
 def write_subtitles(
     segments: Sequence[StylizedSegment],
     *,

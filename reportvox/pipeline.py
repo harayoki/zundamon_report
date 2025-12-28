@@ -1030,15 +1030,6 @@ def _step_finalize(state: PipelineState) -> None:
         if subtitle_segments_for_video is None:
             raise RuntimeError("動画生成に必要な字幕データを準備できませんでした。")
         reporter.log("動画用の字幕ファイルを生成しています...")
-        merged_srt_path = run_dir / f"{state.output_base_name}_video_subtitles.srt"
-        subtitles.write_merged_srt_for_video(
-            subtitle_segments_for_video,
-            path=merged_srt_path,
-            characters={char1.id: char1, char2.id: char2},
-            max_chars_per_line=max_chars,
-        )
-        reporter.log(f"動画生成用に統合した字幕を作成しました -> {merged_srt_path.name}")
-
         ass_path = run_dir / f"{state.output_base_name}.ass"
         subtitles.write_ass_subtitles(
             subtitle_segments_for_video,
